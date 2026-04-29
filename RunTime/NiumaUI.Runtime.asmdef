@@ -1,0 +1,19 @@
+{
+  "name": "NiumaUI.Runtime",
+  "references": [
+    "Unity.TextMeshPro",
+    "Unity.InputSystem",
+    "NiumaTPC.Runtime",
+    "NiumaGame.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+  
+  
+}
