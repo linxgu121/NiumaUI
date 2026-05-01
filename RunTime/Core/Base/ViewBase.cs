@@ -1,20 +1,76 @@
+using NiumaUI.Core.Interface;
+
 namespace NiumaUI.Core
 {
     /// <summary>
-    /// UI 视图抽象基类 —— 纯契约，零状态，零实现
-    /// 不感知 Unity，不感知预制体，不感知显隐状态
-    /// 只定义生命周期钩子，由具体子类或外部管理器驱动
+    /// 纯 C# UI 视图，仅管理逻辑生命周期；
+    /// Unity 对象通过 IViewBinding 访问，场景激活逻辑隔离在绑定层。
     /// </summary>
     public abstract class ViewBase
     {
-        public abstract void Open();      // 展示自身（子类实现动画或瞬间显示）
-        public abstract void Close();     // 隐藏自身
-        public abstract void Refresh();   // 更新内容，不控制显隐
-        
-        /// <summary>
-        /// 每帧驱动（仅视觉表现，如气泡跟随、进度条填充）
-        /// 由 UIManager 通过黑板 Tick 列表统一调用，View 不自驱
-        /// </summary>
-        public virtual void Tick(float deltaTime) { }
+        private IViewBinding _binding;
+
+        public string ViewId { get; private set; }
+        public bool IsOpen { get; private set; }
+        protected IViewBinding Binding => _binding;
+
+        public void Initialize(string viewId, IViewBinding binding)
+        {
+            ViewId = viewId;
+            _binding = binding;
+            OnInitialize();
+        }
+
+        public void Open()
+        {
+            if (IsOpen)
+                return;
+
+            IsOpen = true;
+            _binding?.Show();
+            OnOpen();
+            Refresh();
+        }
+
+        public void Close()
+        {
+            if (!IsOpen)
+                return;
+
+            IsOpen = false;
+            OnClose();
+            _binding?.Hide();
+        }
+
+        public virtual void Refresh()
+        {
+            OnRefresh();
+            _binding?.Refresh();
+        }
+
+        public virtual void Tick(float deltaTime)
+        {
+        }
+
+        protected T GetBinding<T>() where T : class, IViewBinding
+        {
+            return _binding as T;
+        }
+
+        protected virtual void OnInitialize()
+        {
+        }
+
+        protected virtual void OnOpen()
+        {
+        }
+
+        protected virtual void OnClose()
+        {
+        }
+
+        protected virtual void OnRefresh()
+        {
+        }
     }
 }

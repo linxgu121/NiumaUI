@@ -22,6 +22,8 @@ namespace NiumaUI.Core
         [Tooltip("实现 IViewFactory 的组件")]
         public MonoBehaviour ViewFactoryProvider;
 
+        [SerializeField] private DefaultViewFactory defaultViewFactory;
+
         [Tooltip("实现 IGameplayInputBlocker 的组件（如 TPC 输入阻塞器）")]
         public MonoBehaviour InputBlockerProvider;
 
@@ -48,6 +50,14 @@ namespace NiumaUI.Core
             Arbiter = new UIArbiter(Blackboard);
             StateMachine = new UIStateMachine();
 
+            if (ViewFactoryProvider == null)
+            {
+                if (defaultViewFactory == null)
+                    defaultViewFactory = GetComponent<DefaultViewFactory>();
+
+                ViewFactoryProvider = defaultViewFactory;
+            }
+
             _viewFactory = ViewFactoryProvider as IViewFactory;
             _inputBlocker = InputBlockerProvider as IGameplayInputBlocker;
 
@@ -60,6 +70,41 @@ namespace NiumaUI.Core
             _lastMode = Blackboard.CurrentMode;
             Blackboard.OnModeChanged += OnModeChanged;
             StateMachine.Initialize(new GameplayUIState(_inputBlocker));
+        }
+
+        public bool RequestMode(UIMode mode)
+        {
+            return Arbiter != null && Arbiter.RequestMode(mode);
+        }
+
+        public bool PushView(string viewId)
+        {
+            return Arbiter != null && Arbiter.RequestPush(viewId);
+        }
+
+        public bool PopView()
+        {
+            return Arbiter != null && Arbiter.RequestPop();
+        }
+
+        public bool CloseFocusView()
+        {
+            return Arbiter != null && Arbiter.RequestCloseFocus();
+        }
+
+        public bool ClearAllViews()
+        {
+            return Arbiter != null && Arbiter.RequestClearAll();
+        }
+
+        public bool AddTickView(string viewId)
+        {
+            return Arbiter != null && Arbiter.RequestAddTick(viewId);
+        }
+
+        public bool RemoveTickView(string viewId)
+        {
+            return Arbiter != null && Arbiter.RequestRemoveTick(viewId);
         }
 
         private void OnDestroy()

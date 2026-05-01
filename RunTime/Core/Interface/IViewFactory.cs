@@ -1,3 +1,5 @@
+using NiumaUI.Core;
+
 namespace NiumaUI.Core.Interface
 {
     /// <summary>
