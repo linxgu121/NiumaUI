@@ -70,6 +70,22 @@ namespace NiumaUI.Arbitration
 
         /// <summary>
         /// 请求关闭当前焦点视图
+        /// 避免 Gal 关闭对话时误关闭栈顶的其他 UI
+        /// </summary>
+        public bool RequestClose(string viewId)
+        {
+            if (string.IsNullOrEmpty(viewId)) return false;
+
+            _blackboard.RemoveView(viewId);
+
+            if (_blackboard.ViewStack.Count == 0 && _blackboard.CurrentMode == UIMode.Dialogue)
+                _blackboard.SetMode(UIMode.Gameplay);
+
+            return true;
+        }
+
+        /// <summary>
+        /// 请求关闭当前焦点视图
         /// </summary>
         public bool RequestCloseFocus()
         {

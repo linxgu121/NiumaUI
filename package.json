@@ -3,5 +3,8 @@
     "displayName": "NiumaUI",
     "version": "1.0.0",
     "unity": "2022.3.62",
-    "description": "UI系统"
+    "description": "UI系统",
+    "dependencies": {
+        "com.niuma.interact": "1.0.0"
+    }
 }

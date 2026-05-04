@@ -55,6 +55,10 @@ namespace NiumaUI.Core
                 if (defaultViewFactory == null)
                     defaultViewFactory = GetComponent<DefaultViewFactory>();
 
+                // 低代码兜底：场景只挂 UIManager 时，自动补齐默认工厂，避免对话 View 请求无人处理。
+                if (defaultViewFactory == null)
+                    defaultViewFactory = gameObject.AddComponent<DefaultViewFactory>();
+
                 ViewFactoryProvider = defaultViewFactory;
             }
 
@@ -92,6 +96,14 @@ namespace NiumaUI.Core
             return Arbiter != null && Arbiter.RequestCloseFocus();
         }
 
+        /// <summary>
+        /// 请求关闭指定视图（不要求在栈顶）
+        /// </summary>
+        public bool CloseViewById(string viewId)
+        {
+            return Arbiter != null && Arbiter.RequestClose(viewId);
+        }
+
         public bool ClearAllViews()
         {
             return Arbiter != null && Arbiter.RequestClearAll();
@@ -105,6 +117,22 @@ namespace NiumaUI.Core
         public bool RemoveTickView(string viewId)
         {
             return Arbiter != null && Arbiter.RequestRemoveTick(viewId);
+        }
+
+ 
+        /// <summary>
+        /// 尝试获取已打开的视图实例（如需要直接操作视图组件），仅限于当前活跃的视图
+        /// </summary>
+        public bool TryGetView<T>(string viewId, out T view) where T : ViewBase
+        {
+            if (_activeViews.TryGetValue(viewId, out var rawView) && rawView is T typedView)
+            {
+                view = typedView;
+                return true;
+            }
+
+            view = null;
+            return false;
         }
 
         private void OnDestroy()

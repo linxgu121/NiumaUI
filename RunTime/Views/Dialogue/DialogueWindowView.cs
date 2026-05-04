@@ -2,6 +2,9 @@ using NiumaUI.Core;
 
 namespace NiumaUI.Views.Dialogue
 {
+    /// <summary>
+    /// 对话窗口视图
+    /// </summary>
     public sealed class DialogueWindowView : ViewBase
     {
         private readonly DialogueWindowBinding _binding;
