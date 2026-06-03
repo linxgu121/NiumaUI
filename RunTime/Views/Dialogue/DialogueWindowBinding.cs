@@ -1,4 +1,5 @@
 using NiumaUI.Core;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,13 +22,22 @@ namespace NiumaUI.Views.Dialogue
         [SerializeField] private Color speakerTextColor = new Color(0.9f, 0.96f, 1f, 1f);
         [SerializeField] private Color bodyTextColor = new Color(0.95f, 0.95f, 0.92f, 1f);
         [SerializeField] private Color hintColor = new Color(0.9f, 0.72f, 0.32f, 1f);
+        [SerializeField] private Color choiceButtonColor = new Color(0.12f, 0.16f, 0.23f, 0.94f);
+        [SerializeField] private Color choiceButtonDisabledColor = new Color(0.12f, 0.12f, 0.13f, 0.72f);
+        [SerializeField] private Color choiceTextColor = new Color(0.94f, 0.95f, 1f, 1f);
+        [SerializeField] private Color choiceDisabledTextColor = new Color(0.55f, 0.57f, 0.62f, 1f);
 
         [Header("References")]
         [SerializeField] private TMP_Text speakerText;
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private GameObject continueHint;
+        [Tooltip("选项按钮父节点。UI 策划可手动绑定；为空时会自动创建。")]
+        [SerializeField] private RectTransform choiceRoot;
+        [Tooltip("选项按钮模板。需要包含 Button 和 TMP_Text；为空时会自动创建。")]
+        [SerializeField] private Button choiceButtonTemplate;
 
         private CanvasGroup _canvasGroup;
+        private readonly List<Button> _choiceButtons = new List<Button>();
 
         private void Reset()
         {
@@ -87,6 +97,34 @@ namespace NiumaUI.Views.Dialogue
                 continueHint.SetActive(showContinueHint);
         }
 
+        /// <summary>
+        /// 刷新对话选项按钮。
+        /// 按钮点击只回传 ChoiceId，具体对话分支由 Gal 服务层处理。
+        /// </summary>
+        public void SetChoices(DialogueChoiceOptionData[] choices)
+        {
+            EnsureBuilt();
+
+            if (choiceButtonTemplate != null)
+                choiceButtonTemplate.gameObject.SetActive(false);
+
+            var count = choices?.Length ?? 0;
+            if (choiceRoot != null)
+                choiceRoot.gameObject.SetActive(count > 0);
+
+            for (var i = 0; i < count; i++)
+            {
+                var button = GetOrCreateChoiceButton(i);
+                ApplyChoiceButton(button, choices[i]);
+            }
+
+            for (var i = count; i < _choiceButtons.Count; i++)
+            {
+                if (_choiceButtons[i] != null)
+                    _choiceButtons[i].gameObject.SetActive(false);
+            }
+        }
+
         private void EnsureBuilt()
         {
             // Low-code mode: build a usable dialogue window if artists have not provided a prefab yet.
@@ -97,7 +135,7 @@ namespace NiumaUI.Views.Dialogue
             if (_canvasGroup == null)
                 _canvasGroup = gameObject.AddComponent<CanvasGroup>();
 
-            if (speakerText != null && bodyText != null && continueHint != null)
+            if (speakerText != null && bodyText != null && continueHint != null && choiceRoot != null && choiceButtonTemplate != null)
                 return;
 
             var root = GetOrCreateRect("DialogueWindowRoot", transform);
@@ -140,6 +178,12 @@ namespace NiumaUI.Views.Dialogue
 
             if (continueHint == null)
                 continueHint = BuildContinueHint(panel);
+
+            if (choiceRoot == null)
+                choiceRoot = BuildChoiceRoot(root);
+
+            if (choiceButtonTemplate == null)
+                choiceButtonTemplate = BuildChoiceButtonTemplate(choiceRoot);
         }
 
         private GameObject BuildContinueHint(RectTransform parent)
@@ -159,6 +203,107 @@ namespace NiumaUI.Views.Dialogue
 
             hintRoot.gameObject.SetActive(false);
             return hintRoot.gameObject;
+        }
+
+        private RectTransform BuildChoiceRoot(RectTransform parent)
+        {
+            var root = GetOrCreateRect("ChoiceRoot", parent);
+            Stretch(root, new Vector2(0.56f, 0.32f), new Vector2(0.94f, 0.58f), Vector2.zero, Vector2.zero);
+
+            var layout = root.GetComponent<VerticalLayoutGroup>();
+            if (layout == null)
+                layout = root.gameObject.AddComponent<VerticalLayoutGroup>();
+
+            layout.childAlignment = TextAnchor.LowerRight;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.spacing = 8f;
+            layout.padding = new RectOffset(0, 0, 0, 0);
+
+            root.gameObject.SetActive(false);
+            return root;
+        }
+
+        private Button BuildChoiceButtonTemplate(RectTransform parent)
+        {
+            var rect = GetOrCreateRect("ChoiceButtonTemplate", parent);
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(0f, 42f);
+            SetImage(rect.gameObject, choiceButtonColor);
+
+            var image = rect.GetComponent<Image>();
+            if (image != null)
+                image.raycastTarget = true;
+
+            var button = rect.GetComponent<Button>();
+            if (button == null)
+                button = rect.gameObject.AddComponent<Button>();
+
+            var text = GetOrCreateText("ChoiceText", rect);
+            Stretch((RectTransform)text.transform, Vector2.zero, Vector2.one, new Vector2(18f, 4f), new Vector2(-18f, -4f));
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.fontSize = 19f;
+            text.fontStyle = FontStyles.Bold;
+            text.color = choiceTextColor;
+            text.raycastTarget = false;
+
+            button.gameObject.SetActive(false);
+            return button;
+        }
+
+        private Button GetOrCreateChoiceButton(int index)
+        {
+            while (_choiceButtons.Count <= index)
+            {
+                var button = Instantiate(choiceButtonTemplate, choiceRoot);
+                button.name = $"ChoiceButton_{_choiceButtons.Count:00}";
+                button.gameObject.SetActive(false);
+                _choiceButtons.Add(button);
+            }
+
+            return _choiceButtons[index];
+        }
+
+        private void ApplyChoiceButton(Button button, DialogueChoiceOptionData choice)
+        {
+            if (button == null)
+                return;
+
+            var isAvailable = choice != null && choice.IsAvailable;
+            var label = choice == null
+                ? string.Empty
+                : isAvailable
+                    ? choice.DisplayText
+                    : string.IsNullOrWhiteSpace(choice.DisabledText)
+                        ? choice.DisplayText
+                        : choice.DisabledText;
+
+            button.gameObject.SetActive(true);
+            button.interactable = isAvailable;
+            button.onClick.RemoveAllListeners();
+
+            if (isAvailable)
+            {
+                var choiceId = choice.ChoiceId;
+                var callback = choice.OnSelected;
+                button.onClick.AddListener(() => callback?.Invoke(choiceId));
+            }
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = isAvailable ? choiceButtonColor : choiceButtonDisabledColor;
+                image.raycastTarget = true;
+            }
+
+            var labelText = button.GetComponentInChildren<TMP_Text>(true);
+            if (labelText != null)
+            {
+                labelText.text = label ?? string.Empty;
+                labelText.color = isAvailable ? choiceTextColor : choiceDisabledTextColor;
+            }
         }
 
         private static RectTransform GetOrCreateRect(string objectName, Transform parent)
