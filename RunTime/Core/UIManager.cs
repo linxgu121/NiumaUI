@@ -19,12 +19,12 @@ namespace NiumaUI.Core
     public class UIManager : MonoBehaviour
     {
         [Header("外部依赖注入")]
-        [Tooltip("实现 IViewFactory 的组件")]
+        [Tooltip("视图工厂脚本。通常拖 DefaultViewFactory；如果使用自定义 UI 工厂，则拖团队制作的 ViewFactory 脚本。")]
         public MonoBehaviour ViewFactoryProvider;
 
         [SerializeField] private DefaultViewFactory defaultViewFactory;
 
-        [Tooltip("实现 IGameplayInputBlocker 的组件（如 TPC 输入阻塞器）")]
+        [Tooltip("玩法输入阻塞脚本。使用 TPC 时拖 TPC 对应的 UI 输入阻塞适配器；没有需要 UI 阻塞的玩法输入时可留空。")]
         public MonoBehaviour InputBlockerProvider;
 
         // 核心系统
@@ -66,7 +66,7 @@ namespace NiumaUI.Core
             _inputBlocker = InputBlockerProvider as IGameplayInputBlocker;
 
             if (_viewFactory == null)
-                Debug.LogError("[UIManager] ViewFactoryProvider 未实现 IViewFactory");
+                Debug.LogError("[UIManager] ViewFactoryProvider 绑定的不是视图工厂脚本，请拖 DefaultViewFactory 或团队制作的 ViewFactory 脚本。");
         }
 
         private void Start()
