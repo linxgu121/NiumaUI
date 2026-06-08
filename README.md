@@ -103,4 +103,44 @@ UIRoot
 ## 协作边界
 NiumaUI 只做表现通道，不做业务判断。任务是否可接、物品是否能用、技能是否能放，都由对应业务模块输出 ViewData 或 CanXXX 结果。
 
+## 场景挂载与 Inspector 配置
+### UIManager
+建议挂载位置：`CoreScene/BootstrapRoot/UIRoot`。
+
+用途：管理 View 注册、打开、关闭、模式切换和 UI 生命周期。
+
+| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
+| --- | --- | --- | --- |
+| `View Registry` | 拖 `UIViewRegistrySO` | 不建议 | ViewId 无法创建，例如 DialogueWindow 找不到 |
+| `Canvas Root` | 拖全局 Canvas 或 UI 根节点 | 可以 | 留空时工厂可能自动创建 Canvas |
+| `Default Mode` | 按启动 UI 状态选择 | 可以 | 使用默认 Gameplay 模式 |
+| `Input Blocker Provider` | 拖玩家输入阻塞桥接 | 可以 | UI 打开时不会阻塞玩法输入 |
+
+### UIViewRegistrySO
+建议配置位置：项目资产目录。
+
+| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
+| --- | --- | --- | --- |
+| `View Id` | 稳定字符串，例如 `DialogueWindow`、`InventoryPanel` | 不可以 | 外部桥接无法打开该 View |
+| `Prefab` | 拖对应 UI 预制体 | 不可以 | ViewId 存在但实例化失败 |
+
+### DialogueWindowBinding / DialogueWindowView
+建议挂载位置：对话框预制体根节点。
+
+| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
+| --- | --- | --- | --- |
+| `Speaker Text` | 拖说话人 TMP 文本 | 可以 | 不显示说话人 |
+| `Content Text` | 拖正文 TMP 文本 | 不可以 | 对话内容无法显示 |
+| `Choice Root` | 拖选项按钮父节点 | 有选项时不可以 | 最后一句有选项时无法显示选择 |
+| `Choice Button Prefab` | 拖选项按钮预制体 | 有选项时不可以 | 无法生成选项 |
+
+### UIAudioBridge / UIButtonAudioBinder
+建议挂载位置：`UIRoot/UIAudioRoot` 或具体 Button。
+
+| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
+| --- | --- | --- | --- |
+| `Audio Controller` | 拖 `NiumaAudioController` | 不建议 | UI 音效不播放 |
+| `CueId` | 填 `AudioCueDefinition.CueId` | 不可以 | 对应 UI 动作无声音 |
+| `Override Bus` | 普通 UI 建议关闭，除非明确要覆盖 Bus | 可以 | 开启会覆盖 CueDefinition 的 Bus |
+
 
