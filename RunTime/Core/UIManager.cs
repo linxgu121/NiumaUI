@@ -22,9 +22,10 @@ namespace NiumaUI.Core
         [Tooltip("视图工厂脚本。通常拖 DefaultViewFactory；如果使用自定义 UI 工厂，则拖团队制作的 ViewFactory 脚本。")]
         public MonoBehaviour ViewFactoryProvider;
 
+        [Tooltip("默认视图工厂脚本。通常拖同物体上的 DefaultViewFactory；View Registry、窗口层级和生成父节点在 DefaultViewFactory 上配置。")]
         [SerializeField] private DefaultViewFactory defaultViewFactory;
 
-        [Tooltip("玩法输入阻塞脚本。使用 TPC 时拖 TPC 对应的 UI 输入阻塞适配器；没有需要 UI 阻塞的玩法输入时可留空。")]
+        [Tooltip("玩法输入阻塞脚本。使用 NiumaTPC 时，拖 PlayerRoot/UIBridge 上的 TPCGameplayInputBlocker；没有需要 UI 阻塞的玩法输入时可留空。")]
         public MonoBehaviour InputBlockerProvider;
 
         // 核心系统

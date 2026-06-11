@@ -11,10 +11,22 @@ namespace NiumaUI.Core
     {
         private const string BuiltInDialogueViewId = "DialogueWindow";
 
+        [Header("视图注册")]
+        [Tooltip("View 注册表资产。把 DialogueWindow、InventoryPanel 等 ViewId 与对应 Binding 预制体登记在这里。")]
         [SerializeField] private UIViewRegistrySO registry;
+
+        [Header("生成父节点")]
+        [Tooltip("默认生成父节点。通常拖 UIRoot/Windows 或 Canvas 下的默认窗口层；注册表没有指定 LayerId 时会生成到这里。")]
         [SerializeField] private RectTransform defaultRoot;
+
+        [Tooltip("按 LayerId 指定生成父节点。例如 Default、Dialogue、Popup、Toast。UIViewRegistrySO 条目里的 LayerId 会匹配这里。")]
         [SerializeField] private List<UILayerRoot> layerRoots = new List<UILayerRoot>();
+
+        [Header("开发期兜底")]
+        [Tooltip("未在 Registry 中配置 DialogueWindow 时，是否自动创建一个内置对话窗口。开发期可开；正式 UI 配好预制体后建议关闭。")]
         [SerializeField] private bool enableBuiltInDialogueWindow = true;
+
+        [Tooltip("Default Root 为空时，是否自动创建运行时 Canvas。开发期可开；正式核心场景建议手动绑定 Canvas/Windows 根节点。")]
         [SerializeField] private bool autoCreateRuntimeCanvasRoot = true;
 
         private readonly Dictionary<string, ViewBase> _instances = new Dictionary<string, ViewBase>();

@@ -1,4 +1,4 @@
-﻿# NiumaUI
+# NiumaUI
 
 ## 模块定位
 NiumaUI 是通用 UI 管理与 View 层模块，负责窗口生命周期、Binding 代理、基础视图组件和模块 UI 桥接的承载。它不直接理解任务、背包、剧情等业务规则。
@@ -105,16 +105,38 @@ NiumaUI 只做表现通道，不做业务判断。任务是否可接、物品是
 
 ## 场景挂载与 Inspector 配置
 ### UIManager
-建议挂载位置：`CoreScene/BootstrapRoot/UIRoot`。
 
-用途：管理 View 注册、打开、关闭、模式切换和 UI 生命周期。
+建议挂在核心场景的 `UIRoot` 或 `UIRoot/UIManager` 物体上。它是 UI 模块的服务入口，负责注册 `IUIService`、接收打开/关闭窗口请求、调用 View Factory 创建窗口。
 
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `View Registry` | 拖 `UIViewRegistrySO` | 不建议 | ViewId 无法创建，例如 DialogueWindow 找不到 |
-| `Canvas Root` | 拖全局 Canvas 或 UI 根节点 | 可以 | 留空时工厂可能自动创建 Canvas |
-| `Default Mode` | 按启动 UI 状态选择 | 可以 | 使用默认 Gameplay 模式 |
-| `Input Blocker Provider` | 拖玩家输入阻塞桥接 | 可以 | UI 打开时不会阻塞玩法输入 |
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `View Factory Provider` | 拖同物体或子物体上的 `DefaultViewFactory` | 可以 | 会尝试使用 `Default View Factory`；仍为空时自动查找或创建 `DefaultViewFactory` | 指定真正负责生成窗口的工厂脚本。 |
+| `Default View Factory` | 拖同物体上的 `DefaultViewFactory` | 可以 | 如果两个 Factory 字段都为空，运行时会尝试自动补一个默认工厂 | UIManager 的默认工厂兜底引用。 |
+| `Input Blocker Provider` | 使用 TPC 时拖 `PlayerRoot/UIBridge` 上的 `TPCGameplayInputBlocker` | 可以 | UI 打开时不会冻结玩法输入 | UI 面板打开后阻塞玩家移动/交互输入。 |
+
+`View Registry`、窗口生成父节点、Layer Roots 不在 `UIManager` 上填写，它们在 `DefaultViewFactory` 上配置。
+
+### DefaultViewFactory
+
+建议挂在 `UIRoot/UIManager` 同物体，或挂在 `UIRoot/ViewFactory` 子物体上，并把它拖给 `UIManager.View Factory Provider`。它负责把 `ViewId` 翻译成具体 UI 预制体，并决定实例化到哪个 UI 层级父节点下。
+
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `Registry` | 拖 `UIViewRegistrySO` 资产 | 开发期可以 | 没有注册表时，只能依赖内置兜底窗口；正式 UI 的 ViewId 可能打不开 | 配置 `ViewId -> Binding 预制体` 的映射。 |
+| `Default Root` | 拖 Canvas 下默认窗口父节点，例如 `Canvas/Windows/DefaultLayer` | 可以 | 若 `Auto Create Runtime Canvas Root` 开启，会自动创建临时 Canvas；否则窗口没有明确父节点 | 没有指定 LayerId 或找不到 LayerId 时，窗口生成到这里。 |
+| `Layer Roots` | 按需添加 `Default`、`Dialogue`、`Popup`、`Toast` 等层级 | 可以 | 所有窗口都走 `Default Root` | 让不同窗口生成到不同父节点，方便控制层级。 |
+| `Enable Built In Dialogue Window` | 开发期可勾选，正式 UI 配好后建议关闭 | 可以 | 关闭后，`DialogueWindow` 没注册就不会自动生成保底窗口 | 未配置对话窗口预制体时，是否创建内置测试窗口。 |
+| `Auto Create Runtime Canvas Root` | 开发期可勾选，正式核心场景建议关闭并手动绑定 `Default Root` | 可以 | 关闭且未填 Root 时，窗口生成可能失败 | Default Root 为空时是否自动创建运行时 Canvas。 |
+
+`Layer Roots` 的 `LayerId` 要和 `UIViewRegistrySO` 条目里的 `LayerId` 完全一致。比如对话窗口条目填 `Dialogue`，这里就需要有一个 `LayerId = Dialogue` 的元素，并把 `Root` 拖到对话层父节点。
+
+### UI 输入阻塞绑定方式
+
+如果项目使用 `NiumaTPC`，推荐在玩家根物体下建一个子物体：`PlayerRoot/UIBridge`，挂 `TPCGameplayInputBlocker`，然后把这个脚本拖到 `UIManager.Input Blocker Provider`。
+
+绑定后，UI 打开时会通过 `PlayerModuleController.DisableControl("UI.xxx")` 冻结玩家输入；UI 关闭时只释放 `UI.xxx` 原因，不会误解除死亡、剧情、场景加载等其他禁用原因。
+
+如果暂时没有接 TPC，或者该场景不需要 UI 阻塞玩法输入，这个字段可以留空。后续需要支持其他玩法控制器时，再做对应的 `IGameplayInputBlocker` 桥接脚本。
 
 ### UIViewRegistrySO
 建议配置位置：项目资产目录。
