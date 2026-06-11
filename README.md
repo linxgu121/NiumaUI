@@ -22,6 +22,35 @@ NiumaUI 是通用 UI 管理与 View 层模块，负责窗口生命周期、Bindi
 - 需要自定义预制体时，把 GameObject 绑定给 Binding 字段即可。
 - 对话选项按钮由 `DialogueWindowBinding.choiceSlots` 显式绑定，不再自动创建保底按钮。
 
+### UI 显示优先级和文字置顶工具
+Unity UI 本身已经有显示优先级规则，不需要自己写运行时排序系统：
+
+- 同一个 `Canvas` 下，Hierarchy 中越靠后的 UI 元素越后绘制，也就是越显示在上面。
+- 不同 `Canvas` 之间，看 `Canvas.Sorting Layer` 和 `Order in Layer`。
+- 如果某个子 UI 自己挂了 `Canvas` 并开启 `Override Sorting`，它会脱离父 Canvas 的普通层级规则，需要单独检查它的排序值。
+
+常见问题：图片遮住文字，通常是因为 Image 在同父级里排在 Text 后面，或者图片所在 Canvas 的 `Order in Layer` 更高。
+
+已提供编辑器工具：
+
+```text
+Tools/Niuma/UI/打开 UI 层级工具
+Tools/Niuma/UI/选中根节点/文字置顶
+Tools/Niuma/UI/选中根节点/扫描可能遮挡文字的图片
+Tools/Niuma/UI/选中物体/置顶
+Tools/Niuma/UI/选中物体/置底
+```
+
+推荐用法：
+
+1. 在 Hierarchy 中选中一个窗口根节点，例如 `DialogueWindow`、`RoomPanel`、`InventoryPanel`。
+2. 点击 `Tools/Niuma/UI/选中根节点/文字置顶`。
+3. 工具会把该根节点下所有 TMP_Text / Unity UI Text 调到各自父节点的最后面，让文字优先显示在同父级图片上方。
+4. 如果仍然被遮挡，点击 `扫描可能遮挡文字的图片`，Console 会列出同父级里排在文字后面的 Image / RawImage。
+5. 如果遮挡来自另一个 Canvas，去检查两个 Canvas 的 `Sorting Layer / Order in Layer`。
+
+注意：这个工具只整理编辑器里的 Hierarchy 顺序，不会在运行时每帧改 UI 层级。它适合策划摆完 UI 后做一次整理，也适合发现图片遮字时快速修正。
+
 ## 场景使用方法
 推荐放置方式：`UIRoot` 一个 UI 根物体管理 Canvas、EventSystem、UIManager 和窗口预制体。
 
