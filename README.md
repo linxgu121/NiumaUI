@@ -162,6 +162,73 @@ UIRoot
 - 在 `OnRefresh(object viewData)` 中把 ViewData 写到 Label、Button、Image 等元素。
 - 在 `OnOpen()` / `OnClose()` 中处理表现层动画或临时状态。
 - 不要在 Binding 中直接修改任务、背包、商店、MiniGame 等业务 RuntimeState。
+### UIToolkitViewFactory
+
+建议挂载位置：`UIRoot/UIManager` 同物体，或 `UIRoot/UIToolkitRoot/ViewFactory` 子物体。
+
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `Registry` | 拖 `UIToolkitViewRegistrySO` | 不建议 | 无法通过 ViewId 创建 Toolkit View | 提供 ViewId 到 UXML/USS/策略的映射。 |
+| `Layer Roots` | 按层配置 `LayerId + UIDocument + RootElementName` | 不建议 | 找不到对应 LayerId 时窗口创建失败 | 决定窗口挂到哪个 UIDocument 层。 |
+| `Binding Provider Behaviours` | 拖实现 `IToolkitViewBindingProvider` 的组件 | 可以 | 未匹配时使用 Default Binding | 把 `BindingProviderId` 映射到具体 Binding 创建器。 |
+| `Log Warnings` | 建议开启 | 可以 | 关闭后缺配置时不提示 | 方便排查注册表、层级和 Binding 问题。 |
+
+`Layer Roots` 示例：
+
+- `HUD` -> `UIDocument_HUD`
+- `Prompt` -> `UIDocument_Prompt`
+- `Dialogue` -> `UIDocument_Dialogue`
+- `Menu` -> `UIDocument_Menu`
+- `Popup` -> `UIDocument_Popup`
+- `Loading` -> `UIDocument_Loading`
+- `Debug` -> `UIDocument_Debug`
+
+如果 `Root Element Name` 为空，View 会直接挂到该 `UIDocument.rootVisualElement` 下。如果填写了名字，工厂会在文档内查找同名 VisualElement 作为父节点；找不到时回退到 `rootVisualElement`。
+
+### UIToolkitUIManager
+
+建议挂载位置：`UIRoot/UIManager`。这是 UI Toolkit 2.0 的根控制器，负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据 `InputPolicy` 请求玩法输入阻塞。
+
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `View Factory` | 拖 `UIToolkitViewFactory` | 可以 | 如果 `Auto Resolve Factory` 开启，会自动查找同物体/子物体；仍找不到则无法打开 View | Toolkit View 创建入口。 |
+| `Input Blocker Provider` | 使用 TPC 时拖 `PlayerRoot/UIBridge` 上的 `TPCGameplayInputBlocker` | 可以 | `BlockGameplayInput` 不会实际冻结玩家 | Toolkit View 打开/关闭时阻塞或释放玩法输入。 |
+| `Drive Tick In Update` | 独立使用时开启；外部统一 Tick 时关闭 | 可以 | 关闭后 Binding.Tick 不会自动执行 | 驱动已打开 Toolkit View 的 Tick。 |
+| `Auto Resolve Factory` | 建议开启 | 可以 | 关闭后必须手动拖 `View Factory` | 降低场景配置成本。 |
+| `Log Warnings` | 建议开启 | 可以 | 关闭后缺配置时不提示 | 方便排查。 |
+
+常用方法：
+
+- `OpenView(string viewId)`：打开窗口。
+- `OpenView(string viewId, object viewData)`：打开并立即刷新表现数据。
+- `RefreshView(string viewId, object viewData)`：刷新已打开窗口。
+- `CloseView(string viewId)`：关闭指定窗口。
+- `CloseTopView()`：关闭当前顶部窗口。
+- `CloseAllViews()`：关闭所有 Toolkit 窗口。
+- `TryGetBinding<T>()`：获取具体 Binding，供调试或少数强交互面板使用。
+
+### BindingProvider 制作方式
+
+程序给具体窗口写 BindingProvider 时，推荐继承 `ToolkitViewBindingProviderBase`：
+
+```csharp
+public sealed class DialogueToolkitBindingProvider : ToolkitViewBindingProviderBase
+{
+    public override IToolkitViewBinding CreateBinding()
+    {
+        return new DialogueToolkitBinding();
+    }
+}
+```
+
+然后：
+
+1. 把 Provider 组件挂到 `UIRoot/UIToolkitRoot/BindingProviders`。
+2. 在 Provider 的 `Provider Id` 中填写稳定 ID，例如 `DialogueWindow`。
+3. 把该组件拖入 `UIToolkitViewFactory.Binding Provider Behaviours`。
+4. 在 `UIToolkitViewRegistrySO` 对应条目的 `Binding Provider Id` 填同一个 ID。
+
+如果只是测试纯静态 UXML，可以不配置 Provider，系统会使用 `DefaultToolkitViewBinding`。
 ## 场景挂载与 Inspector 配置
 ### UIManager
 
