@@ -103,6 +103,65 @@ UIRoot
 ## 协作边界
 NiumaUI 只做表现通道，不做业务判断。任务是否可接、物品是否能用、技能是否能放，都由对应业务模块输出 ViewData 或 CanXXX 结果。
 
+## NiumaUI 2.0：UI Toolkit 阶段 1
+
+2.0 新 UI 以 UI Toolkit 为主线。当前阶段只落地“协议与注册表”，不会自动替换旧 UGUI 面板，也不会迁移 MiniGame。旧 `UIManager / DefaultViewFactory / ViewBindingBase` 暂时保留为 Legacy。
+
+### UIToolkitViewRegistrySO
+
+创建方式：在 Project 面板右键 `Create / NiumaUI / Toolkit View Registry`。
+
+建议放置位置：`Assets/Game/Moudle/NiumaUI/Config` 或项目统一 UI 配置目录。
+
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `View Id` | 稳定窗口 ID，例如 `DialogueWindow`、`InventoryPanel` | 不可以 | 外部模块无法通过 ViewId 打开该窗口 | 业务层、UIManager、注册表之间的唯一窗口标识。 |
+| `Visual Tree Asset` | 拖 UI Builder 制作的 `.uxml` | 不可以 | 工厂无法创建 Toolkit 窗口 | 定义窗口结构。 |
+| `Style Sheets` | 拖该窗口需要的 `.uss` | 可以 | 只使用默认样式 | 定义窗口外观。 |
+| `Binding Provider Id` | 填程序提供的 Binding ID，例如 `Default`、`DialogueWindow` | 可以 | 空值会按 `Default` 处理 | 第二阶段工厂会用这个 ID 找到真正的 Binding 创建器。 |
+| `Layer Id` | 填 `HUD`、`Prompt`、`Dialogue`、`Menu`、`Popup`、`Loading`、`Debug` 等 | 不建议 | 空值会按 `Default` 处理 | 决定窗口生成到哪个 UIDocument 层。 |
+| `Cache Policy` | 常用窗口选 `HideAndCache`，一次性窗口选 `DestroyOnClose` | 不可以 | 默认隐藏缓存 | 决定关闭后保留还是销毁。 |
+| `Modal Policy` | Popup、Confirm、Loading 选 `Modal`；HUD、Prompt 选 `None` | 不可以 | 默认非模态 | 决定是否阻塞下层 UI 点击。 |
+| `Input Policy` | 对话、菜单、弹窗、加载遮罩选 `BlockGameplayInput`；HUD、提示选 `None` | 不可以 | 默认不阻塞玩法输入 | 决定打开窗口时是否冻结玩家输入。 |
+| `Default Focus Name` | 填 UXML 中默认焦点元素的 `name` | 可以 | 不自动设置焦点 | 用于键盘/手柄导航。 |
+
+`Binding Provider Id` 不直接拖脚本，这是有意设计。Runtime 包不应依赖 Editor 专用的 `MonoScript` 类型；第二阶段会由 `UIToolkitViewFactory` 在 Inspector 中注册 `BindingProviderId -> BindingProvider` 的映射。
+
+### UIToolkitLayerRoot
+
+该结构会在第二阶段由 Toolkit 工厂使用，用来把 View 生成到对应 UIDocument 层。
+
+| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
+| --- | --- | --- | --- | --- |
+| `Layer Id` | 与注册表条目的 `Layer Id` 完全一致 | 不可以 | 找不到对应层级 | 例如 `Dialogue` 的窗口会生成到 `Dialogue` 层。 |
+| `Document` | 拖该层级的 `UIDocument` | 不可以 | 该层无法创建窗口 | 每个主要层级建议一个 UIDocument。 |
+| `Root Element Name` | 填 UIDocument 中作为父节点的 VisualElement 名字 | 可以 | 使用 `document.rootVisualElement` | 用于把窗口挂到文档内部指定容器。 |
+
+推荐核心场景层级：
+
+```text
+UIRoot
+├── EventSystem
+├── UIToolkitRoot
+│   ├── UIDocument_HUD
+│   ├── UIDocument_Prompt
+│   ├── UIDocument_Dialogue
+│   ├── UIDocument_Menu
+│   ├── UIDocument_Popup
+│   ├── UIDocument_Loading
+│   └── UIDocument_Debug
+├── UIManager
+└── UIBridges
+```
+
+### ToolkitViewBindingBase
+
+程序制作具体窗口 Binding 时继承 `ToolkitViewBindingBase`。
+
+- 在 `OnInitialize()` 中用 `Query<T>("元素Name")` 缓存 VisualElement。
+- 在 `OnRefresh(object viewData)` 中把 ViewData 写到 Label、Button、Image 等元素。
+- 在 `OnOpen()` / `OnClose()` 中处理表现层动画或临时状态。
+- 不要在 Binding 中直接修改任务、背包、商店、MiniGame 等业务 RuntimeState。
 ## 场景挂载与 Inspector 配置
 ### UIManager
 
