@@ -63,6 +63,9 @@ namespace NiumaUI.Toolkit
         [Tooltip("玩法输入策略。对话、菜单、弹窗、加载遮罩建议 BlockGameplayInput；HUD、提示使用 None。")]
         [SerializeField] private UIToolkitViewInputPolicy inputPolicy = UIToolkitViewInputPolicy.None;
 
+        [Tooltip("返回栈策略。菜单、弹窗建议 CloseOnBack；HUD、Prompt、Toast 建议 None。")]
+        [SerializeField] private UIToolkitViewBackPolicy backPolicy = UIToolkitViewBackPolicy.CloseOnBack;
+
         [Header("焦点")]
         [Tooltip("默认焦点元素 Name。用于键盘/手柄导航；可留空。")]
         [SerializeField] private string defaultFocusName;
@@ -75,6 +78,7 @@ namespace NiumaUI.Toolkit
         public UIToolkitViewCachePolicy CachePolicy => cachePolicy;
         public UIToolkitViewModalPolicy ModalPolicy => modalPolicy;
         public UIToolkitViewInputPolicy InputPolicy => inputPolicy;
+        public UIToolkitViewBackPolicy BackPolicy => backPolicy;
         public string DefaultFocusName => defaultFocusName;
     }
 

@@ -191,6 +191,10 @@ namespace NiumaUI.Toolkit
                 return false;
             }
 
+            var modalBlocker = CreateModalBlocker(entry);
+            if (modalBlocker != null)
+                parent.Add(modalBlocker);
+
             var root = entry.VisualTreeAsset.CloneTree();
             root.name = string.IsNullOrWhiteSpace(root.name) ? viewId : root.name;
             root.style.display = DisplayStyle.None;
@@ -208,7 +212,7 @@ namespace NiumaUI.Toolkit
 
             var binding = CreateBinding(entry.BindingProviderId);
             binding.Initialize(viewId, root);
-            instance = new UIToolkitViewInstance(entry, root, binding);
+            instance = new UIToolkitViewInstance(entry, root, modalBlocker, binding);
             return true;
         }
 
@@ -233,6 +237,26 @@ namespace NiumaUI.Toolkit
             }
 
             return null;
+        }
+
+        private static VisualElement CreateModalBlocker(UIToolkitViewEntry entry)
+        {
+            if (entry == null || entry.ModalPolicy != UIToolkitViewModalPolicy.Modal)
+                return null;
+
+            var blocker = new VisualElement
+            {
+                name = $"{entry.ViewId}_ModalBlocker",
+                pickingMode = PickingMode.Position
+            };
+            blocker.AddToClassList("niuma-modal-blocker");
+            blocker.style.display = DisplayStyle.None;
+            blocker.style.position = Position.Absolute;
+            blocker.style.left = 0f;
+            blocker.style.right = 0f;
+            blocker.style.top = 0f;
+            blocker.style.bottom = 0f;
+            return blocker;
         }
 
         private IToolkitViewBinding CreateBinding(string providerId)

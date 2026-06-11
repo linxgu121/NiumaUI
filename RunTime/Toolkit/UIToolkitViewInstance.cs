@@ -4,18 +4,20 @@ namespace NiumaUI.Toolkit
 {
     /// <summary>
     /// UI Toolkit View 的运行时实例。
-    /// 保存注册项、VisualElement 根节点和 Binding 实例。
+    /// 保存注册项、VisualElement 根节点、可选模态遮罩和 Binding 实例。
     /// </summary>
     public sealed class UIToolkitViewInstance
     {
         private readonly UIToolkitViewEntry _entry;
         private readonly VisualElement _root;
+        private readonly VisualElement _modalBlocker;
         private readonly IToolkitViewBinding _binding;
 
-        public UIToolkitViewInstance(UIToolkitViewEntry entry, VisualElement root, IToolkitViewBinding binding)
+        public UIToolkitViewInstance(UIToolkitViewEntry entry, VisualElement root, VisualElement modalBlocker, IToolkitViewBinding binding)
         {
             _entry = entry;
             _root = root;
+            _modalBlocker = modalBlocker;
             _binding = binding;
         }
 
@@ -25,12 +27,17 @@ namespace NiumaUI.Toolkit
         public UIToolkitViewCachePolicy CachePolicy => _entry != null ? _entry.CachePolicy : UIToolkitViewCachePolicy.DestroyOnClose;
         public UIToolkitViewModalPolicy ModalPolicy => _entry != null ? _entry.ModalPolicy : UIToolkitViewModalPolicy.None;
         public UIToolkitViewInputPolicy InputPolicy => _entry != null ? _entry.InputPolicy : UIToolkitViewInputPolicy.None;
+        public UIToolkitViewBackPolicy BackPolicy => _entry != null ? _entry.BackPolicy : UIToolkitViewBackPolicy.None;
         public VisualElement Root => _root;
+        public VisualElement ModalBlocker => _modalBlocker;
         public IToolkitViewBinding Binding => _binding;
         public bool IsOpen => _binding != null && _binding.IsOpen;
 
         public void Open(object viewData)
         {
+            if (_modalBlocker != null)
+                _modalBlocker.style.display = DisplayStyle.Flex;
+
             _binding?.Open();
             if (viewData != null)
                 _binding?.Refresh(viewData);
@@ -49,6 +56,8 @@ namespace NiumaUI.Toolkit
         public void Close()
         {
             _binding?.Close();
+            if (_modalBlocker != null)
+                _modalBlocker.style.display = DisplayStyle.None;
         }
 
         public void FocusDefaultElement()
@@ -63,6 +72,7 @@ namespace NiumaUI.Toolkit
         {
             _binding?.Dispose();
             _root?.RemoveFromHierarchy();
+            _modalBlocker?.RemoveFromHierarchy();
         }
     }
 }

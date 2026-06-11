@@ -7,7 +7,7 @@ namespace NiumaUI.Toolkit
 {
     /// <summary>
     /// UI Toolkit 2.0 根控制器。
-    /// 第一版负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据 InputPolicy 请求玩法输入阻塞。
+    /// 负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据策略处理输入阻塞、返回栈和通用 UI 请求。
     /// </summary>
     public sealed class UIToolkitUIManager : MonoBehaviour
     {
@@ -18,6 +18,23 @@ namespace NiumaUI.Toolkit
         [Header("输入阻塞")]
         [Tooltip("玩法输入阻塞脚本。使用 NiumaTPC 时拖 PlayerRoot/UIBridge 上的 TPCGameplayInputBlocker；没有需要阻塞的玩法输入时可留空。")]
         [SerializeField] private MonoBehaviour inputBlockerProvider;
+
+        [Header("通用 ViewId")]
+        [Tooltip("Toast 短提示 ViewId。需要在 UIToolkitViewRegistrySO 中注册，并实现 IToolkitToastBinding。")]
+        [SerializeField] private string toastViewId = "Toast";
+
+        [Tooltip("Confirm 确认弹窗 ViewId。需要在 UIToolkitViewRegistrySO 中注册，并实现 IToolkitConfirmBinding。")]
+        [SerializeField] private string confirmViewId = "Confirm";
+
+        [Tooltip("Loading 遮罩 ViewId。需要在 UIToolkitViewRegistrySO 中注册，并实现 IToolkitLoadingBinding。")]
+        [SerializeField] private string loadingViewId = "Loading";
+
+        [Header("返回键")]
+        [Tooltip("是否在 Update 中监听返回键。关闭后可由外部输入系统调用 TryGoBack。")]
+        [SerializeField] private bool enableKeyboardBack = true;
+
+        [Tooltip("返回键。默认 Escape。")]
+        [SerializeField] private KeyCode backKey = KeyCode.Escape;
 
         [Header("驱动")]
         [Tooltip("是否在 Update 中自动驱动 Toolkit View Tick。若由外部模块统一 Tick，则关闭。")]
@@ -31,10 +48,12 @@ namespace NiumaUI.Toolkit
         [SerializeField] private bool logWarnings = true;
 
         private readonly List<string> _openStack = new List<string>();
+        private readonly List<string> _backStack = new List<string>();
         private IGameplayInputBlocker _inputBlocker;
         private bool _isGameplayInputBlocked;
 
         public IReadOnlyList<string> OpenStack => _openStack;
+        public IReadOnlyList<string> BackStack => _backStack;
 
         private void Awake()
         {
@@ -43,6 +62,9 @@ namespace NiumaUI.Toolkit
 
         private void Update()
         {
+            if (enableKeyboardBack && Input.GetKeyDown(backKey))
+                TryGoBack();
+
             if (driveTickInUpdate)
                 Tick(Time.deltaTime);
         }
@@ -56,6 +78,7 @@ namespace NiumaUI.Toolkit
         {
             viewFactory?.DestroyAll();
             _openStack.Clear();
+            _backStack.Clear();
             SetGameplayInputBlocked(false);
         }
 
@@ -72,8 +95,7 @@ namespace NiumaUI.Toolkit
             if (!viewFactory.TryOpen(viewId, viewData, out var instance) || instance == null)
                 return false;
 
-            _openStack.Remove(viewId);
-            _openStack.Add(viewId);
+            PushOpenView(viewId, instance.BackPolicy);
             ApplyInputBlockState();
             return true;
         }
@@ -89,7 +111,7 @@ namespace NiumaUI.Toolkit
                 return false;
 
             var closed = viewFactory.TryClose(viewId);
-            _openStack.Remove(viewId);
+            RemoveTrackedView(viewId);
             ApplyInputBlockState();
             return closed;
         }
@@ -102,6 +124,20 @@ namespace NiumaUI.Toolkit
             return CloseView(_openStack[_openStack.Count - 1]);
         }
 
+        public bool TryGoBack()
+        {
+            while (_backStack.Count > 0)
+            {
+                var viewId = _backStack[_backStack.Count - 1];
+                if (viewFactory != null && viewFactory.TryGetInstance(viewId, out var instance) && instance != null && instance.IsOpen)
+                    return CloseView(viewId);
+
+                _backStack.RemoveAt(_backStack.Count - 1);
+            }
+
+            return false;
+        }
+
         public void CloseAllViews()
         {
             if (!EnsureReady())
@@ -109,10 +145,82 @@ namespace NiumaUI.Toolkit
 
             viewFactory.CloseAll();
             _openStack.Clear();
+            _backStack.Clear();
             ApplyInputBlockState();
         }
 
-        public bool TryGetBinding<T>(string viewId, out T binding) where T : class, IToolkitViewBinding
+        public bool ShowToast(string message, float durationSeconds = 2f, string styleKey = null)
+        {
+            var data = new UIToolkitToastViewData
+            {
+                ToastId = System.Guid.NewGuid().ToString("N"),
+                Message = message,
+                DurationSeconds = durationSeconds,
+                StyleKey = styleKey
+            };
+
+            return ShowToast(data);
+        }
+
+        public bool ShowToast(UIToolkitToastViewData data)
+        {
+            if (data == null)
+                return false;
+
+            if (!OpenView(toastViewId, data))
+                return false;
+
+            if (TryGetBinding<IToolkitToastBinding>(toastViewId, out var binding))
+                binding.ApplyToast(data);
+
+            return true;
+        }
+
+        public bool ShowConfirm(UIToolkitConfirmViewData data)
+        {
+            if (data == null)
+                return false;
+
+            if (!OpenView(confirmViewId, data))
+                return false;
+
+            if (TryGetBinding<IToolkitConfirmBinding>(confirmViewId, out var binding))
+                binding.ApplyConfirm(data);
+
+            return true;
+        }
+
+        public bool ShowLoading(string message = null, float progress01 = -1f, bool isBlocking = true)
+        {
+            return ShowLoading(new UIToolkitLoadingViewData
+            {
+                LoadingId = "default",
+                Message = message,
+                Progress01 = progress01,
+                IsBlocking = isBlocking
+            });
+        }
+
+        public bool ShowLoading(UIToolkitLoadingViewData data)
+        {
+            if (data == null)
+                return false;
+
+            if (!OpenView(loadingViewId, data))
+                return false;
+
+            if (TryGetBinding<IToolkitLoadingBinding>(loadingViewId, out var binding))
+                binding.ApplyLoading(data);
+
+            return true;
+        }
+
+        public bool HideLoading()
+        {
+            return CloseView(loadingViewId);
+        }
+
+        public bool TryGetBinding<T>(string viewId, out T binding) where T : class
         {
             binding = null;
             if (!EnsureReady() || !viewFactory.TryGetInstance(viewId, out var instance) || instance == null)
@@ -125,6 +233,22 @@ namespace NiumaUI.Toolkit
         public void Tick(float deltaTime)
         {
             viewFactory?.Tick(deltaTime);
+        }
+
+        private void PushOpenView(string viewId, UIToolkitViewBackPolicy backPolicy)
+        {
+            _openStack.Remove(viewId);
+            _openStack.Add(viewId);
+
+            _backStack.Remove(viewId);
+            if (backPolicy == UIToolkitViewBackPolicy.CloseOnBack)
+                _backStack.Add(viewId);
+        }
+
+        private void RemoveTrackedView(string viewId)
+        {
+            _openStack.Remove(viewId);
+            _backStack.Remove(viewId);
         }
 
         private bool EnsureReady()

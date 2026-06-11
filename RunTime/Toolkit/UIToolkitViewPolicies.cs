@@ -20,7 +20,7 @@ namespace NiumaUI.Toolkit
         /// <summary>非模态，不阻塞下层 UI 点击。</summary>
         None = 0,
 
-        /// <summary>模态，打开后阻塞下层 UI 点击。</summary>
+        /// <summary>模态，打开后阻塞同层级下层 UI 点击。</summary>
         Modal = 1
     }
 
@@ -34,5 +34,17 @@ namespace NiumaUI.Toolkit
 
         /// <summary>阻塞玩法输入，适合菜单、对话、弹窗、加载遮罩。</summary>
         BlockGameplayInput = 1
+    }
+
+    /// <summary>
+    /// UI Toolkit View 是否进入返回栈。
+    /// </summary>
+    public enum UIToolkitViewBackPolicy
+    {
+        /// <summary>不进入返回栈，适合 HUD、Prompt、Toast。</summary>
+        None = 0,
+
+        /// <summary>进入返回栈，按 ESC 或返回按钮时关闭。</summary>
+        CloseOnBack = 1
     }
 }

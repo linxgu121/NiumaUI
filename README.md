@@ -123,6 +123,7 @@ NiumaUI 只做表现通道，不做业务判断。任务是否可接、物品是
 | `Cache Policy` | 常用窗口选 `HideAndCache`，一次性窗口选 `DestroyOnClose` | 不可以 | 默认隐藏缓存 | 决定关闭后保留还是销毁。 |
 | `Modal Policy` | Popup、Confirm、Loading 选 `Modal`；HUD、Prompt 选 `None` | 不可以 | 默认非模态 | 决定是否阻塞下层 UI 点击。 |
 | `Input Policy` | 对话、菜单、弹窗、加载遮罩选 `BlockGameplayInput`；HUD、提示选 `None` | 不可以 | 默认不阻塞玩法输入 | 决定打开窗口时是否冻结玩家输入。 |
+| `Back Policy` | 菜单、弹窗选 `CloseOnBack`；HUD、Prompt、Toast 选 `None` | 不可以 | 默认进入返回栈 | 决定 ESC / 返回按钮是否能关闭该 View。 |
 | `Default Focus Name` | 填 UXML 中默认焦点元素的 `name` | 可以 | 不自动设置焦点 | 用于键盘/手柄导航。 |
 
 `Binding Provider Id` 不直接拖脚本，这是有意设计。Runtime 包不应依赖 Editor 专用的 `MonoScript` 类型；第二阶段会由 `UIToolkitViewFactory` 在 Inspector 中注册 `BindingProviderId -> BindingProvider` 的映射。
@@ -193,6 +194,11 @@ UIRoot
 | --- | --- | --- | --- | --- |
 | `View Factory` | 拖 `UIToolkitViewFactory` | 可以 | 如果 `Auto Resolve Factory` 开启，会自动查找同物体/子物体；仍找不到则无法打开 View | Toolkit View 创建入口。 |
 | `Input Blocker Provider` | 使用 TPC 时拖 `PlayerRoot/UIBridge` 上的 `TPCGameplayInputBlocker` | 可以 | `BlockGameplayInput` 不会实际冻结玩家 | Toolkit View 打开/关闭时阻塞或释放玩法输入。 |
+| `Toast View Id` | 填注册表中的 Toast ViewId，默认 `Toast` | 可以 | `ShowToast` 找不到对应 View 时返回 false | 短提示统一入口。 |
+| `Confirm View Id` | 填注册表中的 Confirm ViewId，默认 `Confirm` | 可以 | `ShowConfirm` 找不到对应 View 时返回 false | 确认/取消弹窗统一入口。 |
+| `Loading View Id` | 填注册表中的 Loading ViewId，默认 `Loading` | 可以 | `ShowLoading` 找不到对应 View 时返回 false | 加载遮罩统一入口。 |
+| `Enable Keyboard Back` | 建议开启 | 可以 | 关闭后 ESC 不会自动返回，需要外部调用 `TryGoBack()` | 控制是否监听返回键。 |
+| `Back Key` | 默认 `Escape` | 可以 | 使用默认 ESC | 返回栈触发按键。 |
 | `Drive Tick In Update` | 独立使用时开启；外部统一 Tick 时关闭 | 可以 | 关闭后 Binding.Tick 不会自动执行 | 驱动已打开 Toolkit View 的 Tick。 |
 | `Auto Resolve Factory` | 建议开启 | 可以 | 关闭后必须手动拖 `View Factory` | 降低场景配置成本。 |
 | `Log Warnings` | 建议开启 | 可以 | 关闭后缺配置时不提示 | 方便排查。 |
@@ -207,6 +213,52 @@ UIRoot
 - `CloseAllViews()`：关闭所有 Toolkit 窗口。
 - `TryGetBinding<T>()`：获取具体 Binding，供调试或少数强交互面板使用。
 
+### 阶段 3：Toast / Confirm / Loading / BackStack
+
+第三阶段只提供通用入口和数据协议，不自带固定样式。策划仍需要制作对应 UXML / USS，并在 `UIToolkitViewRegistrySO` 中注册。
+
+推荐注册：
+
+| ViewId | LayerId | Modal Policy | Input Policy | Back Policy | 用途 |
+| --- | --- | --- | --- | --- | --- |
+| `Toast` | `Prompt` | `None` | `None` | `None` | 右上角或底部短提示，自动消失。 |
+| `Confirm` | `Popup` | `Modal` | `BlockGameplayInput` | `CloseOnBack` | 确认/取消弹窗。 |
+| `Loading` | `Loading` | `Modal` | `BlockGameplayInput` | `None` 或 `CloseOnBack` | 场景加载、网络等待、存档等待遮罩。 |
+
+UXML Binding 写法：
+
+- Toast Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitToastBinding`。
+- Confirm Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitConfirmBinding`。
+- Loading Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitLoadingBinding`。
+
+调用入口：
+
+```csharp
+uiToolkitManager.ShowToast("背包已满", 2f, "warning");
+uiToolkitManager.ShowConfirm(new UIToolkitConfirmViewData
+{
+    Title = "退出房间",
+    Message = "确定要离开当前房间吗？",
+    ConfirmText = "离开",
+    CancelText = "取消",
+    Callback = confirmed => { if (confirmed) LeaveRoom(); }
+});
+uiToolkitManager.ShowLoading("正在切换场景...", -1f, true);
+uiToolkitManager.HideLoading();
+```
+
+返回栈规则：
+
+- 只有 `Back Policy = CloseOnBack` 的 View 会进入返回栈。
+- `Enable Keyboard Back` 开启时，按 `Back Key` 会关闭返回栈顶部 View。
+- HUD、交互提示、Toast 通常不进入返回栈。
+- 菜单、设置、Confirm、Popup 通常进入返回栈。
+
+模态遮罩规则：
+
+- `Modal Policy = Modal` 时，工厂会自动在同层级下创建一个遮罩节点。
+- 遮罩节点类名是 `niuma-modal-blocker`，在 USS 中可配置背景色、透明度和过渡动画。
+- 遮罩只阻止同 UIDocument 层级下的下层 UI 点击，不负责业务输入；玩法输入由 `Input Policy` 处理。
 ### BindingProvider 制作方式
 
 程序给具体窗口写 BindingProvider 时，推荐继承 `ToolkitViewBindingProviderBase`：
