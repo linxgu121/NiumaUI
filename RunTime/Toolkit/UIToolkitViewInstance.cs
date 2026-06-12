@@ -1,3 +1,4 @@
+using NiumaUI.Enum;
 using UnityEngine.UIElements;
 
 namespace NiumaUI.Toolkit
@@ -12,6 +13,7 @@ namespace NiumaUI.Toolkit
         private readonly VisualElement _root;
         private readonly VisualElement _modalBlocker;
         private readonly IToolkitViewBinding _binding;
+        private bool? _runtimeBlocksGameplayInput;
 
         public UIToolkitViewInstance(UIToolkitViewEntry entry, VisualElement root, VisualElement modalBlocker, IToolkitViewBinding binding)
         {
@@ -27,14 +29,18 @@ namespace NiumaUI.Toolkit
         public UIToolkitViewCachePolicy CachePolicy => _entry != null ? _entry.CachePolicy : UIToolkitViewCachePolicy.DestroyOnClose;
         public UIToolkitViewModalPolicy ModalPolicy => _entry != null ? _entry.ModalPolicy : UIToolkitViewModalPolicy.None;
         public UIToolkitViewInputPolicy InputPolicy => _entry != null ? _entry.InputPolicy : UIToolkitViewInputPolicy.None;
+        public UIMode InputBlockMode => _entry != null ? _entry.InputBlockMode : UIMode.Menu;
         public UIToolkitViewBackPolicy BackPolicy => _entry != null ? _entry.BackPolicy : UIToolkitViewBackPolicy.None;
         public VisualElement Root => _root;
         public VisualElement ModalBlocker => _modalBlocker;
         public IToolkitViewBinding Binding => _binding;
         public bool IsOpen => _binding != null && _binding.IsOpen;
+        public bool BlocksGameplayInput => _runtimeBlocksGameplayInput ?? InputPolicy == UIToolkitViewInputPolicy.BlockGameplayInput;
 
         public void Open(object viewData)
         {
+            CaptureRuntimePolicies(viewData);
+
             if (_modalBlocker != null)
                 _modalBlocker.style.display = DisplayStyle.Flex;
 
@@ -45,6 +51,7 @@ namespace NiumaUI.Toolkit
 
         public void Refresh(object viewData)
         {
+            CaptureRuntimePolicies(viewData);
             _binding?.Refresh(viewData);
         }
 
@@ -55,9 +62,22 @@ namespace NiumaUI.Toolkit
 
         public void Close()
         {
+            _runtimeBlocksGameplayInput = null;
             _binding?.Close();
             if (_modalBlocker != null)
                 _modalBlocker.style.display = DisplayStyle.None;
+        }
+
+        private void CaptureRuntimePolicies(object viewData)
+        {
+            if (viewData is IUIToolkitInputBlockOverride inputOverride && inputOverride.HasInputBlockOverride)
+            {
+                _runtimeBlocksGameplayInput = inputOverride.BlocksGameplayInput;
+                return;
+            }
+
+            if (viewData != null)
+                _runtimeBlocksGameplayInput = null;
         }
 
         public void FocusDefaultElement()

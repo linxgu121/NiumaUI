@@ -3,6 +3,16 @@ using System;
 namespace NiumaUI.Toolkit
 {
     /// <summary>
+    /// 单次打开 View 时覆盖玩法输入阻塞策略。
+    /// 例如 Loading 有时只显示进度，有时需要阻塞玩家输入。
+    /// </summary>
+    public interface IUIToolkitInputBlockOverride
+    {
+        bool HasInputBlockOverride { get; }
+        bool BlocksGameplayInput { get; }
+    }
+
+    /// <summary>
     /// Toast 短提示请求数据。
     /// </summary>
     [Serializable]
@@ -12,6 +22,7 @@ namespace NiumaUI.Toolkit
         public string Message;
         public float DurationSeconds = 2f;
         public string StyleKey;
+        public Action OnExpired;
     }
 
     /// <summary>
@@ -26,6 +37,7 @@ namespace NiumaUI.Toolkit
         public string ConfirmText = "确定";
         public string CancelText = "取消";
         public bool ShowCancel = true;
+        public bool AutoClose = true;
         public Action<bool> Callback;
     }
 
@@ -33,12 +45,15 @@ namespace NiumaUI.Toolkit
     /// Loading 遮罩请求数据。
     /// </summary>
     [Serializable]
-    public sealed class UIToolkitLoadingViewData
+    public sealed class UIToolkitLoadingViewData : IUIToolkitInputBlockOverride
     {
         public string LoadingId;
         public string Message;
         public float Progress01 = -1f;
         public bool IsBlocking = true;
+
+        public bool HasInputBlockOverride => true;
+        public bool BlocksGameplayInput => IsBlocking;
     }
 
     public interface IToolkitToastBinding

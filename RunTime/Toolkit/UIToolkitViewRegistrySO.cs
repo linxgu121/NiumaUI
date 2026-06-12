@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NiumaUI.Enum;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -63,6 +64,9 @@ namespace NiumaUI.Toolkit
         [Tooltip("玩法输入策略。对话、菜单、弹窗、加载遮罩建议 BlockGameplayInput；HUD、提示使用 None。")]
         [SerializeField] private UIToolkitViewInputPolicy inputPolicy = UIToolkitViewInputPolicy.None;
 
+        [Tooltip("玩法输入阻塞原因。Input Policy 为 BlockGameplayInput 时生效；对话窗口选 Dialogue，菜单/弹窗/加载通常选 Menu，演出选 Cinematic。")]
+        [SerializeField] private UIMode inputBlockMode = UIMode.Menu;
+
         [Tooltip("返回栈策略。菜单、弹窗建议 CloseOnBack；HUD、Prompt、Toast 建议 None。")]
         [SerializeField] private UIToolkitViewBackPolicy backPolicy = UIToolkitViewBackPolicy.CloseOnBack;
 
@@ -78,6 +82,7 @@ namespace NiumaUI.Toolkit
         public UIToolkitViewCachePolicy CachePolicy => cachePolicy;
         public UIToolkitViewModalPolicy ModalPolicy => modalPolicy;
         public UIToolkitViewInputPolicy InputPolicy => inputPolicy;
+        public UIMode InputBlockMode => inputBlockMode;
         public UIToolkitViewBackPolicy BackPolicy => backPolicy;
         public string DefaultFocusName => defaultFocusName;
     }

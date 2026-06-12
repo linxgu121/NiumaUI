@@ -46,7 +46,7 @@ namespace NiumaUI.Arbitration
         public bool RequestPush(string viewId)
         {
             if (string.IsNullOrEmpty(viewId)) return false;
-            if (_blackboard.IsPaused) return false;
+            if (_blackboard.IsPaused && _blackboard.CurrentMode != UIMode.Menu) return false;
 
             _blackboard.PushView(viewId);
             return true;

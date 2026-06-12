@@ -51,6 +51,7 @@ namespace NiumaUI.Toolkit
         private readonly List<string> _backStack = new List<string>();
         private IGameplayInputBlocker _inputBlocker;
         private bool _isGameplayInputBlocked;
+        private UIMode _gameplayInputBlockMode = UIMode.Menu;
 
         public IReadOnlyList<string> OpenStack => _openStack;
         public IReadOnlyList<string> BackStack => _backStack;
@@ -167,6 +168,8 @@ namespace NiumaUI.Toolkit
             if (data == null)
                 return false;
 
+            data.OnExpired ??= () => CloseView(toastViewId);
+
             if (!OpenView(toastViewId, data))
                 return false;
 
@@ -181,11 +184,32 @@ namespace NiumaUI.Toolkit
             if (data == null)
                 return false;
 
-            if (!OpenView(confirmViewId, data))
+            var effectiveData = data;
+            if (data.AutoClose)
+            {
+                var callback = data.Callback;
+                effectiveData = new UIToolkitConfirmViewData
+                {
+                    RequestId = data.RequestId,
+                    Title = data.Title,
+                    Message = data.Message,
+                    ConfirmText = data.ConfirmText,
+                    CancelText = data.CancelText,
+                    ShowCancel = data.ShowCancel,
+                    AutoClose = data.AutoClose,
+                    Callback = confirmed =>
+                    {
+                        CloseView(confirmViewId);
+                        callback?.Invoke(confirmed);
+                    }
+                };
+            }
+
+            if (!OpenView(confirmViewId, effectiveData))
                 return false;
 
             if (TryGetBinding<IToolkitConfirmBinding>(confirmViewId, out var binding))
-                binding.ApplyConfirm(data);
+                binding.ApplyConfirm(effectiveData);
 
             return true;
         }
@@ -278,29 +302,37 @@ namespace NiumaUI.Toolkit
         private void ApplyInputBlockState()
         {
             var shouldBlock = false;
-            for (var i = 0; i < _openStack.Count; i++)
+            var blockMode = UIMode.Menu;
+            for (var i = _openStack.Count - 1; i >= 0; i--)
             {
                 if (viewFactory != null
                     && viewFactory.TryGetInstance(_openStack[i], out var instance)
                     && instance != null
                     && instance.IsOpen
-                    && instance.InputPolicy == UIToolkitViewInputPolicy.BlockGameplayInput)
+                    && instance.BlocksGameplayInput)
                 {
                     shouldBlock = true;
+                    blockMode = instance.InputBlockMode;
                     break;
                 }
             }
 
-            SetGameplayInputBlocked(shouldBlock);
+            SetGameplayInputBlocked(shouldBlock, blockMode);
         }
 
         private void SetGameplayInputBlocked(bool blocked)
         {
-            if (_isGameplayInputBlocked == blocked)
+            SetGameplayInputBlocked(blocked, _gameplayInputBlockMode);
+        }
+
+        private void SetGameplayInputBlocked(bool blocked, UIMode blockMode)
+        {
+            if (_isGameplayInputBlocked == blocked && _gameplayInputBlockMode == blockMode)
                 return;
 
             _isGameplayInputBlocked = blocked;
-            _inputBlocker?.SetBlocked(blocked, UIMode.Menu);
+            _gameplayInputBlockMode = blockMode;
+            _inputBlocker?.SetBlocked(blocked, blockMode);
         }
 
         private void Warn(string message)

@@ -2,8 +2,7 @@
   "name": "NiumaUI.Runtime",
   "references": [
     "Unity.TextMeshPro",
-    "Unity.ugui",
-    "NiumaInteract.Runtime"
+    "Unity.ugui"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

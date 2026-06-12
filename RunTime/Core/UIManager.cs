@@ -18,6 +18,8 @@ namespace NiumaUI.Core
     /// </summary>
     public class UIManager : MonoBehaviour
     {
+        public const string SubtitleBarViewId = "SubtitleBar";
+
         [Header("外部依赖注入")]
         [Tooltip("视图工厂脚本。通常拖 DefaultViewFactory；如果使用自定义 UI 工厂，则拖团队制作的 ViewFactory 脚本。")]
         public MonoBehaviour ViewFactoryProvider;
@@ -286,7 +288,7 @@ namespace NiumaUI.Core
             var toClose = new List<string>();
             foreach (var kvp in _activeViews)
             {
-                if (kvp.Key != "SubtitleBar")
+                if (kvp.Key != SubtitleBarViewId)
                     toClose.Add(kvp.Key);
             }
             foreach (var id in toClose)
