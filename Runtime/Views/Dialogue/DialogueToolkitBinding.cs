@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using NiumaUI.Toolkit;
 using NiumaUI.Toolkit.Common;
@@ -149,7 +149,7 @@ namespace NiumaUI.Views.Dialogue
 
         protected override void OnDisposeTyped()
         {
-            UnregisterChoiceHandlers();
+            Callbacks.UnregisterAll();
         }
 
         private void ApplyData(DialogueToolkitViewData data, DialogueToolkitViewModel viewModel)
@@ -224,7 +224,7 @@ namespace NiumaUI.Views.Dialogue
 
         private void RebuildChoiceButtons()
         {
-            UnregisterChoiceHandlers();
+            Callbacks.UnregisterAll();
             _choiceButtons.Clear();
 
             if (_choiceButtonNames.Length > 0)
@@ -255,21 +255,18 @@ namespace NiumaUI.Views.Dialogue
             for (var i = 0; i < _choiceButtons.Count; i++)
             {
                 var index = i;
-                Action handler = () => HandleChoiceClicked(index);
-                _choiceClickHandlers.Add(handler);
-                _choiceButtons[i].clicked += handler;
+                Callbacks.RegisterButton(_choiceButtons[i], () => HandleChoiceClicked(index), () => CanSelectChoice(index));
             }
         }
 
-        private void UnregisterChoiceHandlers()
+        private bool CanSelectChoice(int index)
         {
-            for (var i = 0; i < _choiceButtons.Count && i < _choiceClickHandlers.Count; i++)
-            {
-                if (_choiceButtons[i] != null && _choiceClickHandlers[i] != null)
-                    _choiceButtons[i].clicked -= _choiceClickHandlers[i];
-            }
+            var choices = ViewModel?.CurrentChoices;
+            if (choices == null || index < 0 || index >= choices.Length)
+                return false;
 
-            _choiceClickHandlers.Clear();
+            var choice = choices[index];
+            return choice != null && choice.IsAvailable;
         }
 
         private void HandleChoiceClicked(int index)
