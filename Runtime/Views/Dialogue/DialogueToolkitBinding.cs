@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using NiumaUI.Toolkit;
+using NiumaUI.Toolkit.Common;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -55,10 +56,39 @@ namespace NiumaUI.Views.Dialogue
     }
 
     /// <summary>
+    /// 对话窗口局部 ViewModel。只保存表现层临时状态，不保存 Gal 剧情进度事实。
+    /// </summary>
+    public sealed class DialogueToolkitViewModel : UIPanelViewModelBase
+    {
+        public string LastSpeaker { get; private set; }
+        public string LastBody { get; private set; }
+        public bool LastShowContinueHint { get; private set; }
+        public DialogueChoiceOptionData[] CurrentChoices { get; private set; } = Array.Empty<DialogueChoiceOptionData>();
+
+        public void Apply(DialogueToolkitViewData data)
+        {
+            data ??= DialogueToolkitViewData.Empty();
+            LastSpeaker = data.Speaker ?? string.Empty;
+            LastBody = data.Body ?? string.Empty;
+            LastShowContinueHint = data.ShowContinueHint;
+            CurrentChoices = data.Choices ?? Array.Empty<DialogueChoiceOptionData>();
+            MarkDirty();
+        }
+
+        protected override void OnClear(UIViewModelClearReason reason)
+        {
+            LastSpeaker = string.Empty;
+            LastBody = string.Empty;
+            LastShowContinueHint = false;
+            CurrentChoices = Array.Empty<DialogueChoiceOptionData>();
+        }
+    }
+
+    /// <summary>
     /// UI Toolkit 对话窗口 Binding。
     /// 只操作 VisualElement，不直接推进 Gal / Story / Quest 业务。
     /// </summary>
-    public sealed class DialogueToolkitBinding : ToolkitViewBindingBase
+    public sealed class DialogueToolkitBinding : ToolkitViewBindingBase<DialogueToolkitViewData, DialogueToolkitViewModel>
     {
         private readonly string _speakerLabelName;
         private readonly string _bodyLabelName;
@@ -70,7 +100,6 @@ namespace NiumaUI.Views.Dialogue
         private readonly bool _logWarnings;
         private readonly List<Button> _choiceButtons = new List<Button>();
         private readonly List<Action> _choiceClickHandlers = new List<Action>();
-        private DialogueChoiceOptionData[] _choices = Array.Empty<DialogueChoiceOptionData>();
         private Label _speakerLabel;
         private Label _bodyLabel;
         private VisualElement _continueHint;
@@ -98,57 +127,52 @@ namespace NiumaUI.Views.Dialogue
             _logWarnings = logWarnings;
         }
 
-        protected override void OnInitialize()
+        protected override void OnInitializeTyped()
         {
-            _speakerLabel = QueryLabel(_speakerLabelName);
-            _bodyLabel = QueryLabel(_bodyLabelName);
+            _speakerLabel = Query<Label>(_speakerLabelName);
+            _bodyLabel = Query<Label>(_bodyLabelName);
             _continueHint = QueryElement(_continueHintName);
             _choiceRoot = QueryElement(_choiceRootName);
             RebuildChoiceButtons();
-            ApplyData(DialogueToolkitViewData.Empty());
+            ApplyData(DialogueToolkitViewData.Empty(), ViewModel);
         }
 
-        protected override void OnRefresh(object viewData)
+        protected override void OnRefreshTyped(DialogueToolkitViewData viewData, DialogueToolkitViewModel viewModel)
         {
-            if (viewData is DialogueToolkitViewData data)
-            {
-                ApplyData(data);
-                return;
-            }
-
-            if (viewData is DialogueWindowView)
-            {
-                Warn("DialogueToolkitBinding 需要 DialogueToolkitViewData。DialogueWindowView 是旧 UGUI View，不会被 Toolkit Binding 直接读取。");
-                return;
-            }
-
-            if (viewData != null)
-                Warn($"不支持的对话 ViewData 类型：{viewData.GetType().Name}。");
+            ApplyData(viewData, viewModel);
         }
 
-        protected override void OnClose()
+        protected override void OnClearTyped(UIViewModelClearReason reason)
         {
-            ApplyData(DialogueToolkitViewData.Empty());
+            ApplyVisualState(string.Empty, string.Empty, false, Array.Empty<DialogueChoiceOptionData>());
         }
 
-        protected override void OnDispose()
+        protected override void OnDisposeTyped()
         {
             UnregisterChoiceHandlers();
         }
 
-        private void ApplyData(DialogueToolkitViewData data)
+        private void ApplyData(DialogueToolkitViewData data, DialogueToolkitViewModel viewModel)
         {
             data ??= DialogueToolkitViewData.Empty();
-            _choices = data.Choices ?? Array.Empty<DialogueChoiceOptionData>();
+            viewModel.Apply(data);
+            ApplyVisualState(
+                viewModel.LastSpeaker,
+                viewModel.LastBody,
+                viewModel.LastShowContinueHint,
+                viewModel.CurrentChoices);
+        }
 
+        private void ApplyVisualState(string speaker, string body, bool showContinueHint, DialogueChoiceOptionData[] choices)
+        {
             if (_speakerLabel != null)
-                _speakerLabel.text = data.Speaker ?? string.Empty;
+                _speakerLabel.text = speaker ?? string.Empty;
 
             if (_bodyLabel != null)
-                _bodyLabel.text = data.Body ?? string.Empty;
+                _bodyLabel.text = body ?? string.Empty;
 
-            SetDisplay(_continueHint, data.ShowContinueHint);
-            ApplyChoices(_choices);
+            SetDisplay(_continueHint, showContinueHint);
+            ApplyChoices(choices ?? Array.Empty<DialogueChoiceOptionData>());
         }
 
         private void ApplyChoices(DialogueChoiceOptionData[] choices)
@@ -167,14 +191,10 @@ namespace NiumaUI.Views.Dialogue
 
             var applyCount = Mathf.Min(optionCount, _choiceButtons.Count);
             for (var i = 0; i < applyCount; i++)
-            {
                 BindChoiceButton(i, choices[i]);
-            }
 
             for (var i = applyCount; i < _choiceButtons.Count; i++)
-            {
                 ClearChoiceButton(_choiceButtons[i]);
-            }
 
             if (optionCount > _choiceButtons.Count)
                 WarnOnce(ref _warnedChoiceOverflow, $"当前句子选项数量为 {optionCount}，但 Toolkit 只找到 {_choiceButtons.Count} 个按钮，多余选项不会显示。");
@@ -254,19 +274,15 @@ namespace NiumaUI.Views.Dialogue
 
         private void HandleChoiceClicked(int index)
         {
-            if (_choices == null || index < 0 || index >= _choices.Length)
+            var choices = ViewModel?.CurrentChoices;
+            if (choices == null || index < 0 || index >= choices.Length)
                 return;
 
-            var choice = _choices[index];
+            var choice = choices[index];
             if (choice == null || !choice.IsAvailable)
                 return;
 
             choice.OnSelected?.Invoke(choice.ChoiceId);
-        }
-
-        private Label QueryLabel(string elementName)
-        {
-            return string.IsNullOrWhiteSpace(elementName) ? null : Query<Label>(elementName.Trim());
         }
 
         private VisualElement QueryElement(string elementName)
