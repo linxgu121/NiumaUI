@@ -1,43 +1,43 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using NiumaUI.Enum;
 
-namespace NiumaUI.RunTimeData
+namespace NiumaUI.RuntimeData
 {
     /// <summary>
-    /// UI 数据黑板
-    /// 仅承载状态快照，不做合法性判断
-    /// 写入接口仅由 UIArbiter 调用
+    /// UI 鏁版嵁榛戞澘
+    /// 浠呮壙杞界姸鎬佸揩鐓э紝涓嶅仛鍚堟硶鎬у垽鏂?
+    /// 鍐欏叆鎺ュ彛浠呯敱 UIArbiter 璋冪敤
     /// </summary>
     public class UIBlackboard
     {
-        // 模式快照
+        // 妯″紡蹇収
         public UIMode CurrentMode { get; private set; } = UIMode.Gameplay;
-        // 上一个模式
+        // 涓婁竴涓ā寮?
         public UIMode PreviousMode { get; private set; } = UIMode.Gameplay;
 
-        // 视图栈（内部可变，外部只读）
+        // 瑙嗗浘鏍堬紙鍐呴儴鍙彉锛屽閮ㄥ彧璇伙級
         private readonly List<string> _viewStack = new List<string>();
         public IReadOnlyList<string> ViewStack => _viewStack;
 
-        // 当前焦点视图 ID
+        // 褰撳墠鐒︾偣瑙嗗浘 ID
         public string FocusViewId { get; private set; }
 
-        // 需要每帧 Tick 的视图 ID 列表
+        // 闇€瑕佹瘡甯?Tick 鐨勮鍥?ID 鍒楄〃
         private readonly List<string> _tickList = new List<string>();
         public IReadOnlyList<string> TickList => _tickList;
 
-        // 外部暂停标志（由 PauseManager 写入）
+        // 澶栭儴鏆傚仠鏍囧織锛堢敱 PauseManager 鍐欏叆锛?
         public bool IsPaused { get; set; } = false;
 
-        // 状态变更事件
+        // 鐘舵€佸彉鏇翠簨浠?
         public event Action<UIMode, UIMode> OnModeChanged;      // (oldMode, newMode)
         public event Action<string> OnViewPushed;
         public event Action<string> OnViewPopped;
         public event Action<string> OnFocusChanged;
         public event Action<string, bool> OnTickChanged;        // (viewId, isAdded)
 
-        // 写入接口（仅 UIArbiter 调用）
+        // 鍐欏叆鎺ュ彛锛堜粎 UIArbiter 璋冪敤锛?
         public void SetMode(UIMode mode)
         {
             if (CurrentMode == mode) return;
@@ -57,7 +57,7 @@ namespace NiumaUI.RunTimeData
         }
 
         /// <summary>
-        /// 弹出栈顶视图
+        /// 寮瑰嚭鏍堥《瑙嗗浘
         /// </summary>
         public void PopView()
         {
@@ -82,7 +82,7 @@ namespace NiumaUI.RunTimeData
         }
 
         /// <summary>
-        /// 清空视图栈
+        /// 娓呯┖瑙嗗浘鏍?
         /// </summary>
         public void ClearStack()
         {
@@ -104,3 +104,5 @@ namespace NiumaUI.RunTimeData
         }
     }
 }
+
+

@@ -1,11 +1,11 @@
-using NiumaUI.Enum;
-using NiumaUI.RunTimeData;
+﻿using NiumaUI.Enum;
+using NiumaUI.RuntimeData;
 
 namespace NiumaUI.Arbitration
 {
     /// <summary>
-    /// UI 仲裁器
-    /// 所有 UI 状态变更必须经过此处裁决
+    /// UI 浠茶鍣?
+    /// 鎵€鏈?UI 鐘舵€佸彉鏇村繀椤荤粡杩囨澶勮鍐?
     /// </summary>
     public class UIArbiter
     {
@@ -14,7 +14,7 @@ namespace NiumaUI.Arbitration
         public UIArbiter(UIBlackboard blackboard) => _blackboard = blackboard;
 
         /// <summary>
-        /// 请求切换全局 UI 模式
+        /// 璇锋眰鍒囨崲鍏ㄥ眬 UI 妯″紡
         /// </summary>
         public bool RequestMode(UIMode targetMode)
         {
@@ -41,7 +41,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求压入视图
+        /// 璇锋眰鍘嬪叆瑙嗗浘
         /// </summary>
         public bool RequestPush(string viewId)
         {
@@ -53,7 +53,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求弹出栈顶视图
+        /// 璇锋眰寮瑰嚭鏍堥《瑙嗗浘
         /// </summary>
         public bool RequestPop()
         {
@@ -61,7 +61,7 @@ namespace NiumaUI.Arbitration
 
             _blackboard.PopView();
 
-            // 栈空时自动回到 Gameplay（Dialogue 模式下栈空 = 对话结束）
+            // 鏍堢┖鏃惰嚜鍔ㄥ洖鍒?Gameplay锛圖ialogue 妯″紡涓嬫爤绌?= 瀵硅瘽缁撴潫锛?
             if (_blackboard.ViewStack.Count == 0 && _blackboard.CurrentMode == UIMode.Dialogue)
                 _blackboard.SetMode(UIMode.Gameplay);
 
@@ -69,8 +69,8 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求关闭当前焦点视图
-        /// 避免 Gal 关闭对话时误关闭栈顶的其他 UI
+        /// 璇锋眰鍏抽棴褰撳墠鐒︾偣瑙嗗浘
+        /// 閬垮厤 Gal 鍏抽棴瀵硅瘽鏃惰鍏抽棴鏍堥《鐨勫叾浠?UI
         /// </summary>
         public bool RequestClose(string viewId)
         {
@@ -85,7 +85,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求关闭当前焦点视图
+        /// 璇锋眰鍏抽棴褰撳墠鐒︾偣瑙嗗浘
         /// </summary>
         public bool RequestCloseFocus()
         {
@@ -101,7 +101,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求加入 Tick 列表
+        /// 璇锋眰鍔犲叆 Tick 鍒楄〃
         /// </summary>
         public bool RequestAddTick(string viewId)
         {
@@ -111,7 +111,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求移出 Tick 列表
+        /// 璇锋眰绉诲嚭 Tick 鍒楄〃
         /// </summary>
         public bool RequestRemoveTick(string viewId)
         {
@@ -120,7 +120,7 @@ namespace NiumaUI.Arbitration
         }
 
         /// <summary>
-        /// 请求清空所有视图并回到 Gameplay
+        /// 璇锋眰娓呯┖鎵€鏈夎鍥惧苟鍥炲埌 Gameplay
         /// </summary>
         public bool RequestClearAll()
         {
@@ -130,3 +130,5 @@ namespace NiumaUI.Arbitration
         }
     }
 }
+
+

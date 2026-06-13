@@ -1,31 +1,52 @@
+﻿using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NiumaUI.Toolkit.Common
 {
+    public enum ToolkitPanelVisualState
+    {
+        Content = 0,
+        Empty = 1,
+        Error = 2,
+        Loading = 3
+    }
+
     /// <summary>
     /// UI Toolkit 常用元素操作工具。
-    /// 业务 Binding 可以复用这里的显示、文本、样式和空状态规则，减少每个模块重复写样板代码。
     /// </summary>
     public static class ToolkitElementUtility
     {
         public static T Query<T>(VisualElement root, string elementName) where T : VisualElement
         {
+            return QueryOptional<T>(root, elementName);
+        }
+
+        public static T QueryOptional<T>(VisualElement root, string elementName) where T : VisualElement
+        {
             return root == null || string.IsNullOrWhiteSpace(elementName) ? null : root.Q<T>(elementName.Trim());
+        }
+
+        public static T QueryRequired<T>(VisualElement root, string elementName, string ownerName = null) where T : VisualElement
+        {
+            var element = QueryOptional<T>(root, elementName);
+            if (element == null)
+                Debug.LogWarning($"[NiumaUI] 找不到必要 UI 元素：Owner={ownerName ?? "Unknown"}, Name={elementName}, Type={typeof(T).Name}");
+            return element;
         }
 
         public static Label QueryLabel(VisualElement root, string elementName)
         {
-            return Query<Label>(root, elementName);
+            return QueryOptional<Label>(root, elementName);
         }
 
         public static Button QueryButton(VisualElement root, string elementName)
         {
-            return Query<Button>(root, elementName);
+            return QueryOptional<Button>(root, elementName);
         }
 
         public static ListView QueryListView(VisualElement root, string elementName)
         {
-            return Query<ListView>(root, elementName);
+            return QueryOptional<ListView>(root, elementName);
         }
 
         public static void SetText(Label label, string text)
@@ -34,10 +55,20 @@ namespace NiumaUI.Toolkit.Common
                 label.text = text ?? string.Empty;
         }
 
+        public static void SetText(VisualElement root, string labelName, string text)
+        {
+            SetText(QueryLabel(root, labelName), text);
+        }
+
         public static void SetDisplay(VisualElement element, bool visible)
         {
             if (element != null)
                 element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        public static void SetVisible(VisualElement element, bool visible)
+        {
+            SetDisplay(element, visible);
         }
 
         public static void SetPicking(VisualElement element, bool enabled)
@@ -88,6 +119,37 @@ namespace NiumaUI.Toolkit.Common
             SetDisplay(normalRoot, !hasError);
             SetDisplay(errorRoot, hasError);
             SetText(errorLabel, hasError ? errorMessage : string.Empty);
+        }
+
+        public static void ApplyPanelState(
+            ToolkitPanelVisualState state,
+            VisualElement contentRoot,
+            VisualElement emptyRoot,
+            VisualElement errorRoot,
+            VisualElement loadingRoot,
+            Label errorLabel = null,
+            string errorMessage = null)
+        {
+            SetDisplay(contentRoot, state == ToolkitPanelVisualState.Content);
+            SetDisplay(emptyRoot, state == ToolkitPanelVisualState.Empty);
+            SetDisplay(errorRoot, state == ToolkitPanelVisualState.Error);
+            SetDisplay(loadingRoot, state == ToolkitPanelVisualState.Loading);
+            SetText(errorLabel, state == ToolkitPanelVisualState.Error ? errorMessage : string.Empty);
+        }
+
+        public static void ApplyIcon(VisualElement iconElement, string addressKey, IToolkitIconResolver resolver)
+        {
+            if (iconElement == null)
+                return;
+
+            Texture2D texture = null;
+            if (resolver != null && !string.IsNullOrWhiteSpace(addressKey))
+                resolver.TryResolve(addressKey, out texture);
+
+            if (texture == null && resolver != null)
+                texture = resolver.MissingIcon;
+
+            iconElement.style.backgroundImage = new StyleBackground(texture);
         }
     }
 }
