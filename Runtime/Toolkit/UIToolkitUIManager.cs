@@ -1,13 +1,12 @@
-using System.Collections.Generic;
-using NiumaUI.Core.Interface;
+﻿using System.Collections.Generic;
 using NiumaUI.Enum;
 using UnityEngine;
 
 namespace NiumaUI.Toolkit
 {
     /// <summary>
-    /// UI Toolkit 2.0 根控制器。
-    /// 负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据策略处理输入阻塞、返回栈和通用 UI 请求。
+    /// UI Toolkit 根控制器。
+    /// 负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据 View 策略处理输入阻塞、返回栈和通用 UI 请求。
     /// </summary>
     public sealed class UIToolkitUIManager : MonoBehaviour
     {
@@ -44,7 +43,7 @@ namespace NiumaUI.Toolkit
         [SerializeField] private bool autoResolveFactory = true;
 
         [Header("调试")]
-        [Tooltip("是否输出缺少工厂、缺少输入阻塞器等警告。")]
+        [Tooltip("是否输出缺少工厂、输入阻塞器等警告。")]
         [SerializeField] private bool logWarnings = true;
 
         private readonly List<string> _openStack = new List<string>();
@@ -281,7 +280,7 @@ namespace NiumaUI.Toolkit
             if (viewFactory != null)
                 return true;
 
-            Warn("UIToolkitViewFactory 未绑定，无法执行 UI Toolkit View 操作。");
+            Warn("未绑定 UIToolkitViewFactory，无法执行 UI Toolkit View 操作。");
             return false;
         }
 

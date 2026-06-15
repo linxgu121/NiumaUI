@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using NiumaUI.Toolkit;
 using NiumaUI.Toolkit.Common;
@@ -63,7 +63,7 @@ namespace NiumaUI.Views.Dialogue
         public string LastSpeaker { get; private set; }
         public string LastBody { get; private set; }
         public bool LastShowContinueHint { get; private set; }
-        public DialogueChoiceOptionData[] CurrentChoices { get; private set; } = Array.Empty<DialogueChoiceOptionData>();
+        public DialogueToolkitChoiceData[] CurrentChoices { get; private set; } = Array.Empty<DialogueToolkitChoiceData>();
 
         public void Apply(DialogueToolkitViewData data)
         {
@@ -71,7 +71,7 @@ namespace NiumaUI.Views.Dialogue
             LastSpeaker = data.Speaker ?? string.Empty;
             LastBody = data.Body ?? string.Empty;
             LastShowContinueHint = data.ShowContinueHint;
-            CurrentChoices = data.Choices ?? Array.Empty<DialogueChoiceOptionData>();
+            CurrentChoices = data.Choices ?? Array.Empty<DialogueToolkitChoiceData>();
             MarkDirty();
         }
 
@@ -80,7 +80,7 @@ namespace NiumaUI.Views.Dialogue
             LastSpeaker = string.Empty;
             LastBody = string.Empty;
             LastShowContinueHint = false;
-            CurrentChoices = Array.Empty<DialogueChoiceOptionData>();
+            CurrentChoices = Array.Empty<DialogueToolkitChoiceData>();
         }
     }
 
@@ -144,7 +144,7 @@ namespace NiumaUI.Views.Dialogue
 
         protected override void OnClearTyped(UIViewModelClearReason reason)
         {
-            ApplyVisualState(string.Empty, string.Empty, false, Array.Empty<DialogueChoiceOptionData>());
+            ApplyVisualState(string.Empty, string.Empty, false, Array.Empty<DialogueToolkitChoiceData>());
         }
 
         protected override void OnDisposeTyped()
@@ -163,7 +163,7 @@ namespace NiumaUI.Views.Dialogue
                 viewModel.CurrentChoices);
         }
 
-        private void ApplyVisualState(string speaker, string body, bool showContinueHint, DialogueChoiceOptionData[] choices)
+        private void ApplyVisualState(string speaker, string body, bool showContinueHint, DialogueToolkitChoiceData[] choices)
         {
             if (_speakerLabel != null)
                 _speakerLabel.text = speaker ?? string.Empty;
@@ -172,10 +172,10 @@ namespace NiumaUI.Views.Dialogue
                 _bodyLabel.text = body ?? string.Empty;
 
             SetDisplay(_continueHint, showContinueHint);
-            ApplyChoices(choices ?? Array.Empty<DialogueChoiceOptionData>());
+            ApplyChoices(choices ?? Array.Empty<DialogueToolkitChoiceData>());
         }
 
-        private void ApplyChoices(DialogueChoiceOptionData[] choices)
+        private void ApplyChoices(DialogueToolkitChoiceData[] choices)
         {
             var optionCount = choices?.Length ?? 0;
             var hasChoices = optionCount > 0;
@@ -200,7 +200,7 @@ namespace NiumaUI.Views.Dialogue
                 WarnOnce(ref _warnedChoiceOverflow, $"当前句子选项数量为 {optionCount}，但 Toolkit 只找到 {_choiceButtons.Count} 个按钮，多余选项不会显示。");
         }
 
-        private void BindChoiceButton(int index, DialogueChoiceOptionData choice)
+        private void BindChoiceButton(int index, DialogueToolkitChoiceData choice)
         {
             var button = _choiceButtons[index];
             if (button == null)
@@ -287,7 +287,7 @@ namespace NiumaUI.Views.Dialogue
             return string.IsNullOrWhiteSpace(elementName) ? null : Root?.Q<VisualElement>(elementName.Trim());
         }
 
-        private static string ResolveDisplayText(DialogueChoiceOptionData choice, bool isAvailable)
+        private static string ResolveDisplayText(DialogueToolkitChoiceData choice, bool isAvailable)
         {
             if (choice == null)
                 return string.Empty;

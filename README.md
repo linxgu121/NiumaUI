@@ -1,718 +1,179 @@
-# NiumaUI
+﻿# NiumaUI
 
-## 模块定位
-NiumaUI 是通用 UI 管理与 View 层模块，负责窗口生命周期、Binding 代理、基础视图组件和模块 UI 桥接的承载。它不直接理解任务、背包、剧情等业务规则。
+`NiumaUI` 是项目统一 UI 生命周期与表现层框架。当前正式主线是 **NiumaUI 2.1.0 / UI Toolkit**。
 
-## 框架设计思路
-- ViewBase 使用纯 C# 类表达 UI 逻辑，避免直接依赖 GameObject 生命周期。
-- Unity 组件细节下沉到 Binding，View 只通过 Binding 调用显示、刷新和关闭。
-- UIManager 负责窗口打开、关闭、缓存和统一入口。
-- 各业务模块通过自己的 UIViewBridge 转换 ViewData，再推给具体 UI Receiver。
+从 2.1.0 起，旧 UGUI 1.0 主链路已经硬退场：`UIManager`、`DefaultViewFactory`、`UIViewRegistrySO`、`ViewBase`、`ViewBindingBase`、`DialogueWindowView`、`DialogueWindowBinding` 等旧脚本不再作为运行时代码保留。新 UI、业务桥接和 MiniGame UI 都必须走 UI Toolkit。
 
-## 核心流程
-1. 业务模块 Service 改变运行时数据并递增 Revision。
-2. UIViewBridge 检测 Revision，构建表现数据 ViewData。
-3. UIManager 打开或取得对应 View。
-4. View 将数据传给 Binding。
-5. Binding 操作 Text、Button、Image、Panel 等 Unity UI 对象。
+## 模块职责
 
-## 模块用法
-- 新 UI 窗口优先创建 ViewBase + Binding，而不是让业务模块直接持有 UI GameObject。
-- Button 回调只调用桥接层或 Controller 暴露的命令接口，不直接改 Service 内部状态。
-- 需要自定义预制体时，把 GameObject 绑定给 Binding 字段即可。
-- 对话选项按钮由 `DialogueWindowBinding.choiceSlots` 显式绑定，不再自动创建保底按钮。
+NiumaUI 负责：
 
-## 场景使用方法
-推荐放置方式：`UIRoot` 一个 UI 根物体管理 Canvas、EventSystem、UIManager 和窗口预制体。
+- 通过 `ViewId` 打开、关闭、刷新、缓存和销毁 UI Toolkit View。
+- 管理 UI 分层：`HUD`、`Prompt`、`Dialogue`、`Menu`、`Popup`、`Loading`、`Debug`。
+- 管理模态、返回栈、焦点、玩法输入阻塞。
+- 管理 `UXML / USS / BindingProvider / Binding / ViewModel`。
+- 提供 Toast、Confirm、Loading 等通用 View 能力。
 
-- `UIRoot`：挂 `Canvas`、`GraphicRaycaster`，建议作为全局或当前场景唯一 UI 根。
-- `UIRoot/EventSystem`：放 Unity `EventSystem`。按钮无响应时先检查它是否存在。
-- `UIRoot/UIManager`：挂 `UIManager` 和 `DefaultViewFactory`，统一打开、关闭和创建 View。
-- `UIRoot/Windows`：放对话框、背包、任务、商店等窗口预制体实例或模板。
-- `UIRoot/PromptLayer`：放交互提示、Toast、Loading 等轻量面板。
-- 各业务模块的 `XXXUIViewBridge` 可以挂在对应模块根物体，也可以统一放在 `UIRoot/Bridges`，但不要把业务 Service 直接挂到 UI 按钮上。
-- 每个窗口建议一个 Binding 组件管理 Text/Button/Image 引用；ViewBase 保持纯 C# 逻辑。
+NiumaUI 不负责：
 
-### 对话框场景绑定
-推荐层级：
+- 背包、任务、商店、剧情、小游戏等业务规则。
+- 直接修改业务 Service 的运行时状态。
+- 战斗、交互、场景加载等玩法事实判断。
+
+业务模块继续输出自己的 `ViewData / UIUpdate`，再由对应 `XxxToolkitReceiver` 推给 `UIToolkitUIManager`。
+
+## 推荐场景层级
+
+核心场景建议只保留一套全局 UI Root：
 
 ```text
 UIRoot
-└── Windows
-    └── DialogueWindow
-        ├── SpeakerText
-        ├── BodyText
-        ├── ContinueHint
-        └── ChoiceRoot
-            ├── ChoiceButton_01
-            ├── ChoiceButton_02
-            ├── ChoiceButton_03
-            └── ChoiceButton_04
+├─ EventSystem
+├─ UIToolkitRoot
+│  ├─ UIDocument_HUD
+│  ├─ UIDocument_Prompt
+│  ├─ UIDocument_Dialogue
+│  ├─ UIDocument_Menu
+│  ├─ UIDocument_Popup
+│  ├─ UIDocument_Loading
+│  └─ UIDocument_Debug
+├─ UIManager
+│  ├─ UIToolkitUIManager
+│  └─ UIToolkitViewFactory
+└─ UIBridges
+   ├─ DialogueToolkitReceiver
+   ├─ InventoryToolkitReceiver
+   ├─ MiniGameToolkitReceiver
+   └─ 其他模块 ToolkitReceiver
 ```
 
-`DialogueWindow` 根物体：
+`UIManager` 是物体名，不是旧 UGUI `UIManager` 脚本。这个物体上建议只挂 `UIToolkitUIManager` 和 `UIToolkitViewFactory`。
 
-1. 挂 `DialogueWindowBinding`。
-2. `Speaker Text` 绑定说话人 TMP_Text。
-3. `Body Text` 绑定正文 TMP_Text。
-4. `Continue Hint` 绑定继续提示物体。
-5. `Choice Root` 绑定选项按钮父节点。
-6. `Choice Slots` 数组大小设置为最多显示的选项数量。
+## 必挂脚本
 
-每个 `Choice Slots` 元素建议这样绑定：
+### EventSystem
 
-- `Slot Root`：绑定 `ChoiceButton_xx` 根物体。
-- `Button`：绑定该选项按钮的 `Button` 组件。
-- `Label Text`：绑定该按钮内的 TMP_Text。
-- `Available Root`：可选，绑定“可点击状态”表现物体。
-- `Disabled Root`：可选，绑定“不可点击状态”表现物体。
-- `On Choice Bound`：可选，选项刷新到按钮时触发，适合播放刷新动画。
-- `On Choice Clicked`：可选，玩家点击选项时触发，适合播放音效、动画、埋点。
-
-注意：`On Choice Clicked` 不建议直接写业务逻辑。真正的对话分支会自动通过 `ChoiceId` 回到 Gal 对话系统，保证任务、剧情、存档都能知道玩家选择了什么。
-
-### 普通按钮绑定业务事件
-普通 UI 按钮可以绑定业务桥接脚本或控制器的 `void` 方法。推荐规则：
-
-- 打开/关闭 UI：绑定 UI 桥接层或窗口控制脚本。
-- 购买、使用、领取、提交：绑定对应模块 Controller 或 Bridge 的公开命令方法。
-- 场景跳转：绑定 `NiumaScene.UIBridge.SceneButtonAction`，不要直接调用 `SceneManager.LoadScene`。
-- 对话选项：优先用 `ChoiceId` 驱动业务，不要在按钮事件里直接改任务、剧情、存档。
-
-按钮绑定步骤：
-
-1. 选中 Button 物体。
-2. 找到 `Button` 组件的 `OnClick()`。
-3. 点击 `+` 添加事件。
-4. 拖入目标组件所在物体，例如挂了 `SceneButtonAction` 的按钮物体。
-5. 在函数下拉框选择公开 `void` 方法，例如 `SceneButtonAction.LoadConfiguredScene()`。
-
-### 对话选项跳转场景
-如果对话中有“进入你画我猜 / 下次再说”两个选项：
-
-1. 在 `DialogueAsset` 中配置两个选项：
-   - `enter_draw_guess`
-   - `maybe_next_time`
-2. `DialogueWindowBinding.choiceSlots` 只负责显示这两个按钮。
-3. `On Choice Clicked` 可以播放按钮音效，但不要直接跳场景。
-4. Gal / Story / Interact 桥接层收到 `enter_draw_guess` 后，再调用 `NiumaSceneController` 进入 MiniGame 场景。
-5. `maybe_next_time` 只结束对话或返回普通对话流程。
-
-这样做的好处是：UI 策划能自由摆按钮和做表现，对话系统仍然能稳定记录玩家选择，后续任务、剧情、存档不会断链。
-
-## 协作边界
-NiumaUI 只做表现通道，不做业务判断。任务是否可接、物品是否能用、技能是否能放，都由对应业务模块输出 ViewData 或 CanXXX 结果。
-
-## NiumaUI 2.0：UI Toolkit 阶段 1
-
-2.0 新 UI 以 UI Toolkit 为主线。当前阶段只落地“协议与注册表”，不会自动替换旧 UGUI 面板，也不会迁移 MiniGame。旧 `UIManager / DefaultViewFactory / ViewBindingBase` 暂时保留为 Legacy。
-
-## NiumaUI 2.1.0：公共 Toolkit Binding 辅助
-
-2.1.0 第一批编码先补公共辅助层，不直接制作具体业务面板。它们是给程序写 `XxxToolkitBinding` 时复用的代码，不是给策划单独挂载的 MonoBehaviour。
-
-### 这批代码解决什么
-
-| 类名 | 用途 | 谁使用 |
-| --- | --- | --- |
-| `ToolkitPanelViewModelBase` | 保存 UI 局部状态，例如选中项、输入框临时文本、当前页签、MiniGame 笔刷状态 | 程序在各模块 ToolkitBridge 中继承 |
-| `ToolkitElementUtility` | 统一 Label 文本、元素显隐、样式类、空状态、错误状态的写法 | 所有 Toolkit Binding |
-| `ToolkitButtonBinder` | 统一 Button 查询、点击注册、解绑、启用禁用、文本刷新 | 所有有按钮的 Toolkit Binding |
-| `ToolkitListViewBinder<T>` | 统一 ListView 数据源、刷新、空状态显示 | 背包列表、商店列表、任务列表、玩家列表、聊天列表 |
-
-### 场景里需要挂什么
-
-这批公共类本身不需要挂到场景物体上。场景仍然按 UI Toolkit 主线配置：
-
-```text
-UIRoot
-├── EventSystem
-├── UIToolkitRoot
-│   ├── UIDocument_HUD
-│   ├── UIDocument_Prompt
-│   ├── UIDocument_Dialogue
-│   ├── UIDocument_Menu
-│   ├── UIDocument_Popup
-│   └── UIDocument_Loading
-├── UIManager
-│   ├── UIToolkitUIManager
-│   └── UIToolkitViewFactory
-└── UIBridges
-    ├── DialogueToolkitReceiver
-    ├── InventoryToolkitReceiver
-    └── MiniGameToolkitReceiver
-```
-
-策划主要配置：
-
-1. 在 `UIToolkitViewRegistrySO` 中登记 ViewId、UXML、USS、LayerId、BindingProviderId。
-2. 在 `UIToolkitViewFactory.Binding Provider Behaviours` 中拖入各模块的 `XxxToolkitBindingProvider`。
-3. 在业务模块的 `XxxToolkitBindingProvider` 面板里填写 UXML 元素 `name`，例如 `ItemList`、`EmptyRoot`、`ConfirmButton`。
-
-### 程序接入示例
-
-业务 Binding 内部可以这样使用按钮和列表：
-
-```csharp
-private readonly ToolkitButtonBinder _buyButton = new ToolkitButtonBinder();
-private readonly ToolkitListViewBinder<ShopProductViewData> _productList = new ToolkitListViewBinder<ShopProductViewData>();
-
-protected override void OnInitialize()
-{
-    _buyButton.Bind(Root, "BuyButton", HandleBuyClicked);
-    _productList.Bind(Root, "ProductList", MakeProductItem, BindProductItem, "EmptyRoot");
-}
-
-protected override void OnRefresh(object viewData)
-{
-    var panel = viewData as ShopPanelViewData;
-    _productList.SetItems(panel?.Products);
-    _buyButton.SetEnabled(panel != null && panel.SelectedProductCanBuy);
-}
-
-protected override void OnDispose()
-{
-    _buyButton.Dispose();
-    _productList.Dispose();
-}
-```
-
-注意：
-
-- `ToolkitPanelViewModelBase` 只能保存 UI 局部状态，不能保存背包真实数量、商店库存、任务状态等业务事实。
-- `ToolkitListViewBinder<T>` 优先用于大量重复项；例如 MiniGame 玩家列表、观战者列表、聊天记录都应该用它或等价虚拟化列表。
-- 如果只是一个固定按钮，使用 `ToolkitButtonBinder`；不要在 `OnRefresh` 里反复注册 `button.clicked += ...`。
-- 这些辅助类不引用任何业务模块，后续所有 `NiumaXxx.ToolkitBridge` 都可以复用。
-
-### 业务闭环面板默认 ViewId
-
-第四阶段开始，业务面板优先通过各模块自己的 `XxxToolkitReceiver` 接入 Toolkit View。注册表可以先按下表创建 ViewId；具体 UXML 元素和按钮事件由后续各模块 Binding 继续细化。
-
-| 模块 | Receiver 脚本 | 默认 ViewId | 推荐 LayerId | 推荐 InputPolicy | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| NiumaInventory | `InventoryToolkitReceiver` | `InventoryPanel` | `Menu` | `BlockGameplayInput` | 背包面板 |
-| NiumaSave | `SaveToolkitReceiver` | `SavePanel` | `Menu` | `BlockGameplayInput` | 存档列表 / 保存读取面板 |
-| NiumaQuest | `QuestToolkitReceiver` | `QuestTracker` | `HUD` | `None` | 当前追踪任务 |
-| NiumaReward | `RewardToolkitReceiver` | `RewardPanel` | `Popup` | `BlockGameplayInput` | 奖励预览 / 发放结果 |
-| NiumaShop | `ShopToolkitReceiver` | `ShopPanel` | `Menu` | `BlockGameplayInput` | 商店购买面板 |
-| NiumaCraft | `CraftToolkitReceiver` | `CraftPanel` | `Menu` | `BlockGameplayInput` | 合成配方面板 |
-
-这些 Receiver 只负责把业务模块已有的 `XxxUIUpdate` 推给 `UIToolkitUIManager`。它们不是具体 UI 画面本身，也不应该直接挂到 Button 上。真正的按钮点击仍然回到各模块 `XxxUIViewBridge` 或 Controller 的公开命令入口。
-
-### UIToolkitViewRegistrySO
-
-创建方式：在 Project 面板右键 `Create / NiumaUI / Toolkit View Registry`。
-
-建议放置位置：`Assets/Game/Moudle/NiumaUI/Config` 或项目统一 UI 配置目录。
-
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `View Id` | 稳定窗口 ID，例如 `DialogueWindow`、`InventoryPanel` | 不可以 | 外部模块无法通过 ViewId 打开该窗口 | 业务层、UIManager、注册表之间的唯一窗口标识。 |
-| `Visual Tree Asset` | 拖 UI Builder 制作的 `.uxml` | 不可以 | 工厂无法创建 Toolkit 窗口 | 定义窗口结构。 |
-| `Style Sheets` | 拖该窗口需要的 `.uss` | 可以 | 只使用默认样式 | 定义窗口外观。 |
-| `Binding Provider Id` | 填程序提供的 Binding ID，例如 `Default`、`DialogueWindow` | 可以 | 空值会按 `Default` 处理 | 第二阶段工厂会用这个 ID 找到真正的 Binding 创建器。 |
-| `Layer Id` | 填 `HUD`、`Prompt`、`Dialogue`、`Menu`、`Popup`、`Loading`、`Debug` 等 | 不建议 | 空值会按 `Default` 处理 | 决定窗口生成到哪个 UIDocument 层。 |
-| `Cache Policy` | 常用窗口选 `HideAndCache`，一次性窗口选 `DestroyOnClose` | 不可以 | 默认隐藏缓存 | 决定关闭后保留还是销毁。 |
-| `Modal Policy` | Popup、Confirm、Loading 选 `Modal`；HUD、Prompt 选 `None` | 不可以 | 默认非模态 | 决定是否阻塞下层 UI 点击。 |
-| `Input Policy` | 对话、菜单、弹窗、加载遮罩选 `BlockGameplayInput`；HUD、提示选 `None` | 不可以 | 默认不阻塞玩法输入 | 决定打开窗口时是否冻结玩家输入。 |
-| `Input Block Mode` | 对话窗口选 `Dialogue`；菜单、弹窗、Loading 通常选 `Menu`；演出字幕选 `Cinematic` | 可以 | 默认 `Menu` | 传给玩法输入阻塞脚本的原因，避免所有 Toolkit View 都被当作菜单阻塞。 |
-| `Back Policy` | 菜单、弹窗选 `CloseOnBack`；HUD、Prompt、Toast 选 `None` | 不可以 | 默认进入返回栈 | 决定 ESC / 返回按钮是否能关闭该 View。 |
-| `Default Focus Name` | 填 UXML 中默认焦点元素的 `name` | 可以 | 不自动设置焦点 | 用于键盘/手柄导航。 |
-
-`Binding Provider Id` 不直接拖脚本，这是有意设计。Runtime 包不应依赖 Editor 专用的 `MonoScript` 类型；第二阶段会由 `UIToolkitViewFactory` 在 Inspector 中注册 `BindingProviderId -> BindingProvider` 的映射。
-
-### UIToolkitLayerRoot
-
-该结构会在第二阶段由 Toolkit 工厂使用，用来把 View 生成到对应 UIDocument 层。
-
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `Layer Id` | 与注册表条目的 `Layer Id` 完全一致 | 不可以 | 找不到对应层级 | 例如 `Dialogue` 的窗口会生成到 `Dialogue` 层。 |
-| `Document` | 拖该层级的 `UIDocument` | 不可以 | 该层无法创建窗口 | 每个主要层级建议一个 UIDocument。 |
-| `Root Element Name` | 填 UIDocument 中作为父节点的 VisualElement 名字 | 可以 | 使用 `document.rootVisualElement` | 用于把窗口挂到文档内部指定容器。 |
-
-推荐核心场景层级：
-
-```text
-UIRoot
-├── EventSystem
-├── UIToolkitRoot
-│   ├── UIDocument_HUD
-│   ├── UIDocument_Prompt
-│   ├── UIDocument_Dialogue
-│   ├── UIDocument_Menu
-│   ├── UIDocument_Popup
-│   ├── UIDocument_Loading
-│   └── UIDocument_Debug
-├── UIManager
-└── UIBridges
-```
-
-### ToolkitViewBindingBase
-
-程序制作具体窗口 Binding 时继承 `ToolkitViewBindingBase`。
-
-- 在 `OnInitialize()` 中用 `Query<T>("元素Name")` 缓存 VisualElement。
-- 在 `OnRefresh(object viewData)` 中把 ViewData 写到 Label、Button、Image 等元素。
-- 在 `OnOpen()` / `OnClose()` 中处理表现层动画或临时状态。
-- 不要在 Binding 中直接修改任务、背包、商店、MiniGame 等业务 RuntimeState。
-### UIToolkitViewFactory
-
-建议挂载位置：`UIRoot/UIManager` 同物体，或 `UIRoot/UIToolkitRoot/ViewFactory` 子物体。
-
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `Registry` | 拖 `UIToolkitViewRegistrySO` | 不建议 | 无法通过 ViewId 创建 Toolkit View | 提供 ViewId 到 UXML/USS/策略的映射。 |
-| `Layer Roots` | 按层配置 `LayerId + UIDocument + RootElementName` | 不建议 | 找不到对应 LayerId 时窗口创建失败 | 决定窗口挂到哪个 UIDocument 层。 |
-| `Binding Provider Behaviours` | 拖实现 `IToolkitViewBindingProvider` 的组件 | 可以 | 未匹配时使用 Default Binding | 把 `BindingProviderId` 映射到具体 Binding 创建器。 |
-| `Log Warnings` | 建议开启 | 可以 | 关闭后缺配置时不提示 | 方便排查注册表、层级和 Binding 问题。 |
-
-`Layer Roots` 示例：
-
-- `HUD` -> `UIDocument_HUD`
-- `Prompt` -> `UIDocument_Prompt`
-- `Dialogue` -> `UIDocument_Dialogue`
-- `Menu` -> `UIDocument_Menu`
-- `Popup` -> `UIDocument_Popup`
-- `Loading` -> `UIDocument_Loading`
-- `Debug` -> `UIDocument_Debug`
-
-如果 `Root Element Name` 为空，View 会直接挂到该 `UIDocument.rootVisualElement` 下。如果填写了名字，工厂会在文档内查找同名 VisualElement 作为父节点；找不到时回退到 `rootVisualElement`。
+挂 Unity 自带 `EventSystem`。如果按钮、输入框、ListView 没反应，优先检查这里。
 
 ### UIToolkitUIManager
 
-建议挂载位置：`UIRoot/UIManager`。这是 UI Toolkit 2.0 的根控制器，负责通过 ViewId 打开、关闭、刷新 Toolkit View，并根据 `InputPolicy` 请求玩法输入阻塞。
+建议挂在 `UIRoot/UIManager` 物体上。
 
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `View Factory` | 拖 `UIToolkitViewFactory` | 可以 | 如果 `Auto Resolve Factory` 开启，会自动查找同物体/子物体；仍找不到则无法打开 View | Toolkit View 创建入口。 |
-| `Input Blocker Provider` | 使用 TPC 时拖 `PlayerRoot/UIBridge` 上的 `TPCGameplayInputBlocker` | 可以 | `BlockGameplayInput` 不会实际冻结玩家 | Toolkit View 打开/关闭时阻塞或释放玩法输入。 |
-| `Toast View Id` | 填注册表中的 Toast ViewId，默认 `Toast` | 可以 | `ShowToast` 找不到对应 View 时返回 false | 短提示统一入口。 |
-| `Confirm View Id` | 填注册表中的 Confirm ViewId，默认 `Confirm` | 可以 | `ShowConfirm` 找不到对应 View 时返回 false | 确认/取消弹窗统一入口。 |
-| `Loading View Id` | 填注册表中的 Loading ViewId，默认 `Loading` | 可以 | `ShowLoading` 找不到对应 View 时返回 false | 加载遮罩统一入口。 |
-| `Enable Keyboard Back` | 建议开启 | 可以 | 关闭后 ESC 不会自动返回，需要外部调用 `TryGoBack()` | 控制是否监听返回键。 |
-| `Back Key` | 默认 `Escape` | 可以 | 使用默认 ESC | 返回栈触发按键。 |
-| `Drive Tick In Update` | 独立使用时开启；外部统一 Tick 时关闭 | 可以 | 关闭后 Binding.Tick 不会自动执行 | 驱动已打开 Toolkit View 的 Tick。 |
-| `Auto Resolve Factory` | 建议开启 | 可以 | 关闭后必须手动拖 `View Factory` | 降低场景配置成本。 |
-| `Log Warnings` | 建议开启 | 可以 | 关闭后缺配置时不提示 | 方便排查。 |
+常用字段：
 
-常用方法：
+| 字段 | 填什么 | 可留空 | 留空后果 |
+|---|---|---|---|
+| View Factory | 同物体或子物体上的 `UIToolkitViewFactory` | 不建议 | 无法打开任何 View |
+| Input Blocker Provider | 需要冻结玩法输入时，拖玩家输入阻塞桥接，例如 `TPCGameplayInputBlocker` | 可以 | UI 打开时不会冻结玩家控制 |
+| Toast / Confirm / Loading ViewId | 注册表中对应通用 View 的 `ViewId` | 可以 | 对应通用弹窗不可用 |
+| Enable Keyboard Back | 是否监听 ESC 返回 | 可以 | 关闭后需要外部输入系统调用 `TryGoBack()` |
+| Drive Tick In Update | 是否由本组件每帧 Tick | 可以 | 如果外部统一 Tick，应关闭避免重复驱动 |
 
-- `OpenView(string viewId)`：打开窗口。
-- `OpenView(string viewId, object viewData)`：打开并立即刷新表现数据。
-- `RefreshView(string viewId, object viewData)`：刷新已打开窗口。
-- `CloseView(string viewId)`：关闭指定窗口。
-- `CloseTopView()`：关闭当前顶部窗口。
-- `CloseAllViews()`：关闭所有 Toolkit 窗口。
-- `TryGetBinding<T>()`：获取具体 Binding，供调试或少数强交互面板使用。
+### UIToolkitViewFactory
 
-### 阶段 3：Toast / Confirm / Loading / BackStack
+建议与 `UIToolkitUIManager` 挂在同一个物体上。
 
-第三阶段只提供通用入口和数据协议，不自带固定样式。策划仍需要制作对应 UXML / USS，并在 `UIToolkitViewRegistrySO` 中注册。
+| 字段 | 填什么 | 可留空 | 留空后果 |
+|---|---|---|---|
+| Registry | `UIToolkitViewRegistrySO` | 不建议 | 无法按 ViewId 创建窗口 |
+| Layer Roots | 每个 LayerId 对应的 `UIDocument` | 不建议 | 对应层无法显示 View |
+| Binding Provider Behaviours | 各模块的 `XxxToolkitBindingProvider` | 可以 | 未匹配时使用默认空 Binding，窗口可能无内容 |
+| Log Warnings | 建议开启 | 可以 | 缺配置时不提示 |
 
-推荐注册：
+### UIAudioBridge（可选）
 
-| ViewId | LayerId | Modal Policy | Input Policy | Back Policy | 用途 |
-| --- | --- | --- | --- | --- | --- |
-| `Toast` | `Prompt` | `None` | `None` | `None` | 右上角或底部短提示，自动消失。 |
-| `Confirm` | `Popup` | `Modal` | `BlockGameplayInput` | `CloseOnBack` | 确认/取消弹窗。 |
-| `Loading` | `Loading` | `Modal` | `BlockGameplayInput` | `None` 或 `CloseOnBack` | 场景加载、网络等待、存档等待遮罩。 |
+需要 UI 打开、关闭、焦点变化音效时，挂在 `UIRoot` 或 `UIBridges` 下。
 
-UXML Binding 写法：
+| 字段 | 填什么 |
+|---|---|
+| Toolkit UI Manager | 拖 `UIToolkitUIManager`，不要拖旧 UGUI 脚本 |
+| Audio Controller | 拖 `AudioRoot` 上的 `NiumaAudioController` |
+| View Audio Cues | `ViewId` 填 `UIToolkitViewRegistrySO` 中注册的 ID；CueId 填 `AudioCueDefinition.CueId` |
 
-- Toast Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitToastBinding`。
-- Confirm Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitConfirmBinding`。
-- Loading Binding 继承 `ToolkitViewBindingBase` 并实现 `IToolkitLoadingBinding`。
+## UIToolkitViewRegistrySO
 
-调用入口：
+创建方式：Project 右键 `Create / NiumaUI / Toolkit View Registry`。
 
-```csharp
-uiToolkitManager.ShowToast("背包已满", 2f, "warning");
-uiToolkitManager.ShowConfirm(new UIToolkitConfirmViewData
-{
-    Title = "退出房间",
-    Message = "确定要离开当前房间吗？",
-    ConfirmText = "离开",
-    CancelText = "取消",
-    Callback = confirmed => { if (confirmed) LeaveRoom(); }
-});
-uiToolkitManager.ShowLoading("正在切换场景...", -1f, true);
-uiToolkitManager.HideLoading();
-```
+每个 View 条目建议这样填：
 
-返回栈规则：
+| 字段 | 填什么 | 说明 |
+|---|---|---|
+| View Id | 稳定 ID，例如 `InventoryPanel` | 业务桥接和 `OpenView` 都靠它找窗口 |
+| Visual Tree Asset | 对应 `.uxml` | UI 结构 |
+| Style Sheets | 对应 `.uss` | UI 样式 |
+| Binding Provider Id | Provider 的 ID | 留空时走 `Default` |
+| Layer Id | `HUD/Menu/Popup` 等 | 决定挂到哪个 UIDocument |
+| Cache Policy | 常用面板 `HideAndCache`，一次性弹窗 `DestroyOnClose` | 决定关闭后是否缓存 |
+| Modal Policy | Popup/Loading 通常 Modal，HUD/Prompt 通常 None | 是否阻塞底层 UI 点击 |
+| Input Policy | 菜单/对话/加载通常阻塞玩法输入，HUD 通常不阻塞 | 是否冻结玩家控制 |
+| Input Block Mode | `Dialogue/Menu/Cinematic` 等 | 传给输入阻塞桥接的原因 |
+| Back Policy | 菜单/弹窗通常 `CloseOnBack`，HUD 通常 `None` | ESC/返回键策略 |
+| Default Focus Name | 默认聚焦元素 name | 可留空 |
 
-- 只有 `Back Policy = CloseOnBack` 的 View 会进入返回栈。
-- `Enable Keyboard Back` 开启时，按 `Back Key` 会关闭返回栈顶部 View。
-- HUD、交互提示、Toast 通常不进入返回栈。
-- 菜单、设置、Confirm、Popup 通常进入返回栈。
+## 业务模块接入规则
 
-模态遮罩规则：
+每个业务模块推荐独立一个 `NiumaXxx.ToolkitBridge` 程序集。
 
-- `Modal Policy = Modal` 时，工厂会自动在同层级下创建一个遮罩节点。
-- 遮罩节点类名是 `niuma-modal-blocker`，在 USS 中可配置背景色、透明度和过渡动画。
-- 遮罩只阻止同 UIDocument 层级下的下层 UI 点击，不负责业务输入；玩法输入由 `Input Policy` 处理。
-### 阶段 4：首批 Toolkit View 迁移
-
-第四阶段先提供 Dialogue、InteractionPrompt 的 Toolkit 绑定入口。旧 UGUI 仍保留为 Legacy，但新 UI 制作优先使用本节方式。
-
-#### DialogueToolkitBindingProvider
-
-建议挂载位置：`UIRoot/UIToolkitRoot/BindingProviders/DialogueToolkitBindingProvider`。
-
-注册表建议：
-
-| ViewId | LayerId | BindingProviderId | Modal | Input | Back | 用途 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `DialogueWindow` | `Dialogue` | `DialogueWindow` | `None` | `BlockGameplayInput` | `CloseOnBack` | 对话窗口。 |
-
-UXML 元素建议：
+依赖方向固定为：
 
 ```text
-DialogueWindow(root)
-├── SpeakerText     (Label)
-├── BodyText        (Label)
-├── ContinueHint    (VisualElement)
-└── ChoiceRoot      (VisualElement)
-    ├── ChoiceButton_01 (Button + class: niuma-dialogue-choice)
-    ├── ChoiceButton_02 (Button + class: niuma-dialogue-choice)
-    ├── ChoiceButton_03 (Button + class: niuma-dialogue-choice)
-    └── ChoiceButton_04 (Button + class: niuma-dialogue-choice)
+NiumaXxx.ToolkitBridge -> NiumaXxx.Runtime + NiumaUI.Runtime
 ```
 
-`DialogueToolkitBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `DialogueWindow` | 不建议 | 注册表 BindingProviderId 找不到时会走 Default Binding，对话不会刷新文本 |
-| `Speaker Label Name` | 填 `SpeakerText` | 可以 | 不显示说话人 |
-| `Body Label Name` | 填 `BodyText` | 不建议 | 不显示正文 |
-| `Continue Hint Name` | 填 `ContinueHint` | 可以 | 不控制继续提示显隐 |
-| `Choice Root Name` | 填 `ChoiceRoot` | 可以 | 只会从根节点按 class 查找选项按钮，不控制选项区域显隐 |
-| `Choice Button Names` | 填 `ChoiceButton_01` 等按钮 name | 可以 | 为空时按 `Choice Button Class` 查找 |
-| `Choice Button Class` | 默认 `niuma-dialogue-choice` | 可以 | 只在未填 Button Names 时使用 |
-| `Hide Choice Root When Empty` | 建议开启 | 可以 | 关闭后无选项时 ChoiceRoot 仍显示 |
-| `Log Warnings` | 建议开启 | 可以 | 关闭后缺按钮/缺元素时不提示 |
-
-对话选项点击后仍通过 `DialogueChoiceOptionData.OnSelected(ChoiceId)` 回到 Gal / Story，不要在 Button 里直接写任务或场景跳转。
-
-#### InteractionPromptToolkitSink + InteractionPromptToolkitBindingProvider
-
-`InteractionPromptToolkitSink` 是给 NiumaInteract 绑定的接收器；`InteractionPromptToolkitBindingProvider` 是给 UXML 刷新的 Binding 创建器。两者通常都放在核心场景 UI 根下。
-
-推荐层级：
-
-```text
-UIRoot
-├── UIBridges
-│   └── InteractionPromptToolkitSink
-└── UIToolkitRoot
-    └── BindingProviders
-        └── InteractionPromptToolkitBindingProvider
-```
-
-注册表建议：
-
-| ViewId | LayerId | BindingProviderId | Modal | Input | Back | 用途 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `InteractionPrompt` | `Prompt` | `InteractionPrompt` | `None` | `None` | `None` | 交互提示。 |
-
-UXML 元素建议：
-
-```text
-InteractionPrompt(root)
-├── PromptText      (Label)
-├── TargetName      (Label，可选)
-└── HoldProgress    (ProgressBar，可选)
-```
-
-`InteractionPromptToolkitSink` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `UI Manager` | 拖 `UIRoot/UIManager` 上的 `UIToolkitUIManager` | 可以 | 开启自动查找时会尝试找；仍找不到则不显示提示 |
-| `Auto Find UI Manager` | 测试可开，正式建议手动绑定后关闭 | 可以 | 关闭且未绑定时提示不会显示 |
-| `View Id` | 默认 `InteractionPrompt` | 不建议 | 空值会按 `InteractionPrompt` 处理 |
-| `Interact Key Label` | 填显示用按键，如 `E` | 可以 | 使用默认 E |
-| `Text Format` | 默认 `[{0}] {1} {2}` | 可以 | 只影响显示文案，不影响真实输入 |
-| `Close View When Empty` | 建议开启 | 可以 | 关闭后无目标时不会自动关闭提示 |
-
-把 `InteractionPromptToolkitSink` 拖给 NiumaInteract 的 Prompt Sink / Receiver 字段即可。它只负责把交互提示数据转成 Toolkit ViewData，不参与交互检测。
-
-`InteractionPromptToolkitBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `InteractionPrompt` | 不建议 | 注册表无法匹配 Binding |
-| `Prompt Label Name` | 填 `PromptText` | 不建议 | 不显示提示文本 |
-| `Target Label Name` | 填 `TargetName` | 可以 | 不单独显示目标名 |
-| `Progress Bar Name` | 填 `HoldProgress` | 可以 | 不显示长按进度条 |
-| `Progress Fill Name` | 填自定义填充条元素 name | 可以 | 只使用 ProgressBar 或不显示进度 |
-| `Hide Root When Empty` | 建议开启 | 可以 | 无目标时根节点不自动隐藏 |
-
-SceneLoading 的 Toolkit 桥接在 `NiumaScene` 模块中，见 NiumaScene README 的 `SceneLoadingToolkitBridge` 章节。
-
-#### AmbientNarrativeToolkitBindingProvider
-
-`AmbientNarrativeToolkitBindingProvider` 是环境叙事的 UI Toolkit Binding 创建器。它只负责刷新气泡 / 旁白字幕的 UXML 元素，不触发 Gal 对话，也不推进剧情。
-
-推荐层级：
-
-```text
-UIRoot
-├── UIBridges
-│   └── AmbientNarrativeToolkitBridge   (NiumaGalToolkitAmbientNarrativeBridge，属于 NiumaGal)
-└── UIToolkitRoot
-    └── BindingProviders
-        └── AmbientNarrativeToolkitBindingProvider
-```
-
-注册表建议：
-
-| ViewId | LayerId | BindingProviderId | Modal | Input | Back | 用途 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `AmbientNarrative` | `Prompt` | `AmbientNarrative` | `None` | `None` | `None` | 环境叙事气泡 / 旁白字幕 |
-
-UXML 元素建议：
-
-```text
-AmbientNarrative(root)
-├── AmbientBubbleRoot        (VisualElement)
-│   ├── BubbleSpeakerText    (Label，可选)
-│   └── BubbleBodyText       (Label)
-└── AmbientSubtitleRoot      (VisualElement)
-    ├── SubtitleSpeakerText  (Label，可选)
-    └── SubtitleBodyText     (Label)
-```
-
-`AmbientNarrativeToolkitBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `AmbientNarrative` | 不建议 | 注册表 BindingProviderId 找不到时会走 Default Binding，文本不会刷新 |
-| `Bubble Root Name` | 填 `AmbientBubbleRoot` | 不建议 | Bubble 模式无法显示气泡根节点 |
-| `Bubble Speaker Label Name` | 填 `BubbleSpeakerText` | 可以 | 不显示气泡说话人 |
-| `Bubble Body Label Name` | 填 `BubbleBodyText` | 不建议 | 不显示气泡正文 |
-| `Subtitle Root Name` | 填 `AmbientSubtitleRoot` | 不建议 | Subtitle / Monologue 模式无法显示字幕根节点 |
-| `Subtitle Speaker Label Name` | 填 `SubtitleSpeakerText` | 可以 | 不显示字幕说话人 |
-| `Subtitle Body Label Name` | 填 `SubtitleBodyText` | 不建议 | 不显示字幕正文 |
-| `Hide Root When Empty` | 建议开启 | 可以 | 没有环境叙事内容时根节点仍显示 |
-| `Position Bubble By Screen Point` | 建议开启 | 可以 | 关闭后气泡不会跟随 NPC 屏幕位置 |
-| `Log Warnings` | 建议开启 | 可以 | 缺 ViewData 类型或配置错误时不提示 |
-
-真正把 Gal 环境叙事数据推到这个 View 的脚本是 `NiumaGalToolkitAmbientNarrativeBridge`，它在 NiumaGal 模块中。`AmbientNarrativeToolkitBindingProvider` 只管 UXML 刷新，Bridge 才管业务数据来源。
-#### 默认 Toast / Confirm / Loading BindingProvider
-
-第四阶段补充了三套默认通用 BindingProvider。简单项目可以直接使用，不需要程序再写 Binding。
-
-推荐挂载位置：`UIRoot/UIToolkitRoot/BindingProviders/CommonToolkitBindings`。可以建三个子物体分别挂载：
-
-```text
-BindingProviders
-├── ToastBindingProvider      (ToolkitToastBindingProvider)
-├── ConfirmBindingProvider    (ToolkitConfirmBindingProvider)
-└── LoadingBindingProvider    (ToolkitLoadingBindingProvider)
-```
-
-注册表建议：
-
-| ViewId | LayerId | BindingProviderId | Modal | Input | Back | 推荐 Provider |
-| --- | --- | --- | --- | --- | --- | --- |
-| `Toast` | `Prompt` | `Toast` | `None` | `None` | `None` | `ToolkitToastBindingProvider` |
-| `Confirm` | `Popup` | `Confirm` | `Modal` | `BlockGameplayInput` | `CloseOnBack` | `ToolkitConfirmBindingProvider` |
-| `Loading` | `Loading` | `Loading` | `Modal` | `BlockGameplayInput` | `None` | `ToolkitLoadingBindingProvider` |
-
-把三个 Provider 组件拖入 `UIToolkitViewFactory.Binding Provider Behaviours`，并确保各自 `Provider Id` 与注册表的 `BindingProviderId` 一致。
-
-Toast UXML 元素建议：
-
-```text
-Toast(root)
-└── Message (Label)
-```
-
-`ToolkitToastBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `Toast` | 不建议 | 注册表无法匹配默认 Toast Binding |
-| `Message Label Name` | 填 `Message` | 不建议 | Toast 不显示文字 |
-| `Style Root Name` | 可填 Toast 样式根节点 | 可以 | 使用根节点添加 StyleKey class |
-
-Confirm UXML 元素建议：
-
-```text
-Confirm(root)
-├── Title         (Label)
-├── Message       (Label)
-├── ConfirmButton (Button)
-└── CancelButton  (Button)
-```
-
-`ToolkitConfirmBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `Confirm` | 不建议 | 注册表无法匹配默认 Confirm Binding |
-| `Title Label Name` | 填 `Title` | 可以 | 不显示标题 |
-| `Message Label Name` | 填 `Message` | 不建议 | 不显示确认正文 |
-| `Confirm Button Name` | 填 `ConfirmButton` | 不建议 | 无法点击确认 |
-| `Cancel Button Name` | 填 `CancelButton` | 可以 | 不显示/无法点击取消 |
-
-Loading UXML 元素建议：
-
-```text
-Loading(root)
-├── BlockingRoot  (VisualElement，可选)
-├── Message       (Label)
-├── Progress      (ProgressBar，可选)
-└── ProgressFill  (VisualElement，可选，自定义进度条填充)
-```
-
-`ToolkitLoadingBindingProvider` 字段：
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Provider Id` | 填 `Loading` | 不建议 | 注册表无法匹配默认 Loading Binding |
-| `Message Label Name` | 填 `Message` | 可以 | 不显示加载文案 |
-| `Progress Bar Name` | 填 `Progress` | 可以 | 不显示 UI Toolkit ProgressBar |
-| `Progress Fill Name` | 填 `ProgressFill` | 可以 | 不显示自定义进度条填充 |
-| `Blocking Root Name` | 填 `BlockingRoot` | 可以 | 使用根节点控制是否拦截 UI 点击 |
-
-说明：`UIToolkitLoadingViewData.IsBlocking` 会覆盖本次打开的玩法输入阻塞策略。也就是说，同一个 `Loading` View 可以在“只显示进度”和“冻结玩法输入”两种模式间切换。
-### BindingProvider 制作方式
-
-程序给具体窗口写 BindingProvider 时，推荐继承 `ToolkitViewBindingProviderBase`：
-
-```csharp
-public sealed class DialogueToolkitBindingProvider : ToolkitViewBindingProviderBase
-{
-    public override IToolkitViewBinding CreateBinding()
-    {
-        return new DialogueToolkitBinding();
-    }
-}
-```
-
-然后：
-
-1. 把 Provider 组件挂到 `UIRoot/UIToolkitRoot/BindingProviders`。
-2. 在 Provider 的 `Provider Id` 中填写稳定 ID，例如 `DialogueWindow`。
-3. 把该组件拖入 `UIToolkitViewFactory.Binding Provider Behaviours`。
-4. 在 `UIToolkitViewRegistrySO` 对应条目的 `Binding Provider Id` 填同一个 ID。
-
-如果只是测试纯静态 UXML，可以不配置 Provider，系统会使用 `DefaultToolkitViewBinding`。
-## 场景挂载与 Inspector 配置
-### UIManager
-
-建议挂在核心场景的 `UIRoot` 或 `UIRoot/UIManager` 物体上。它是 UI 模块的服务入口，负责注册 `IUIService`、接收打开/关闭窗口请求、调用 View Factory 创建窗口。
-
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `View Factory Provider` | 拖同物体或子物体上的 `DefaultViewFactory` | 可以 | 会尝试使用 `Default View Factory`；仍为空时自动查找或创建 `DefaultViewFactory` | 指定真正负责生成窗口的工厂脚本。 |
-| `Default View Factory` | 拖同物体上的 `DefaultViewFactory` | 可以 | 如果两个 Factory 字段都为空，运行时会尝试自动补一个默认工厂 | UIManager 的默认工厂兜底引用。 |
-| `Input Blocker Provider` | 使用 TPC 时拖 `PlayerRoot/UIBridge` 上的 `TPCGameplayInputBlocker` | 可以 | UI 打开时不会冻结玩法输入 | UI 面板打开后阻塞玩家移动/交互输入。 |
-
-`View Registry`、窗口生成父节点、Layer Roots 不在 `UIManager` 上填写，它们在 `DefaultViewFactory` 上配置。
-
-### DefaultViewFactory
-
-建议挂在 `UIRoot/UIManager` 同物体，或挂在 `UIRoot/ViewFactory` 子物体上，并把它拖给 `UIManager.View Factory Provider`。它负责把 `ViewId` 翻译成具体 UI 预制体，并决定实例化到哪个 UI 层级父节点下。
-
-| Inspector 字段 | 推荐填写 | 可留空 | 留空后果 | 作用 |
-| --- | --- | --- | --- | --- |
-| `Registry` | 拖 `UIViewRegistrySO` 资产 | 开发期可以 | 没有注册表时，只能依赖内置兜底窗口；正式 UI 的 ViewId 可能打不开 | 配置 `ViewId -> Binding 预制体` 的映射。 |
-| `Default Root` | 拖 Canvas 下默认窗口父节点，例如 `Canvas/Windows/DefaultLayer` | 可以 | 若 `Auto Create Runtime Canvas Root` 开启，会自动创建临时 Canvas；否则窗口没有明确父节点 | 没有指定 LayerId 或找不到 LayerId 时，窗口生成到这里。 |
-| `Layer Roots` | 按需添加 `Default`、`Dialogue`、`Popup`、`Toast` 等层级 | 可以 | 所有窗口都走 `Default Root` | 让不同窗口生成到不同父节点，方便控制层级。 |
-| `Enable Built In Dialogue Window` | 开发期可勾选，正式 UI 配好后建议关闭 | 可以 | 关闭后，`DialogueWindow` 没注册就不会自动生成保底窗口 | 未配置对话窗口预制体时，是否创建内置测试窗口。 |
-| `Auto Create Runtime Canvas Root` | 开发期可勾选，正式核心场景建议关闭并手动绑定 `Default Root` | 可以 | 关闭且未填 Root 时，窗口生成可能失败 | Default Root 为空时是否自动创建运行时 Canvas。 |
-
-`Layer Roots` 的 `LayerId` 要和 `UIViewRegistrySO` 条目里的 `LayerId` 完全一致。比如对话窗口条目填 `Dialogue`，这里就需要有一个 `LayerId = Dialogue` 的元素，并把 `Root` 拖到对话层父节点。
-
-### UI 输入阻塞绑定方式
-
-如果项目使用 `NiumaTPC`，推荐在玩家根物体下建一个子物体：`PlayerRoot/UIBridge`，挂 `TPCGameplayInputBlocker`，然后把这个脚本拖到 `UIManager.Input Blocker Provider`。
-
-绑定后，UI 打开时会通过 `PlayerModuleController.DisableControl("UI.xxx")` 冻结玩家输入；UI 关闭时只释放 `UI.xxx` 原因，不会误解除死亡、剧情、场景加载等其他禁用原因。
-
-如果暂时没有接 TPC，或者该场景不需要 UI 阻塞玩法输入，这个字段可以留空。后续需要支持其他玩法控制器时，再做对应的 `IGameplayInputBlocker` 桥接脚本。
-
-### UIViewRegistrySO
-建议配置位置：项目资产目录。
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `View Id` | 稳定字符串，例如 `DialogueWindow`、`InventoryPanel` | 不可以 | 外部桥接无法打开该 View |
-| `Prefab` | 拖对应 UI 预制体 | 不可以 | ViewId 存在但实例化失败 |
-
-### DialogueWindowBinding / DialogueWindowView
-建议挂载位置：对话框预制体根节点。
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Speaker Text` | 拖说话人 TMP 文本 | 可以 | 不显示说话人 |
-| `Body Text` | 拖正文 TMP 文本 | 不可以 | 对话内容无法显示 |
-| `Choice Root` | 拖选项按钮父节点 | 有选项时不可以 | 最后一句有选项时无法显示选择 |
-| `Choice Slots` | 数组中逐个绑定策划摆好的选项按钮槽位 | 有选项时不可以 | 最后一句有选项时无法显示选择 |
-
-### UIAudioBridge / UIButtonAudioBinder
-建议挂载位置：`UIRoot/UIAudioRoot` 或具体 Button。
-
-| 字段 | 怎么填 | 可否留空 | 不填会怎样 |
-| --- | --- | --- | --- |
-| `Audio Controller` | 拖 `NiumaAudioController` | 不建议 | UI 音效不播放 |
-| `CueId` | 填 `AudioCueDefinition.CueId` | 不可以 | 对应 UI 动作无声音 |
-| `Override Bus` | 普通 UI 建议关闭，除非明确要覆盖 Bus | 可以 | 开启会覆盖 CueDefinition 的 Bus |
-
-
-
-## UI Toolkit 业务面板三层绑定规则
-
-从 NiumaUI 2.1.0 开始，业务面板不能只配置 XxxToolkitReceiver。完整链路必须有三层：
-
-1. XxxUIViewBridge：业务模块把 Service 数据转换成 XxxUIUpdate。
-2. XxxToolkitReceiver：接收 XxxUIUpdate，调用 UIToolkitUIManager.OpenView/RefreshView。
-3. XxxToolkitBindingProvider + XxxToolkitBinding：由 UIToolkitViewFactory 创建 Binding，把 XxxUIUpdate 写入 UXML。
-
-如果只挂 Receiver，不挂 BindingProvider，窗口会打开但会回退到默认空 Binding，UI 不会显示业务内容。
-
-### 通用业务面板 UXML name
-
-| UXML name | 类型 | 用途 |
-| --- | --- | --- |
-| TitleText | Label | 面板标题，例如背包、商店、任务追踪 |
-| StatusText | Label | Revision、状态、数量等摘要 |
-| ListRoot | VisualElement | Binding 会在这里动态生成行 Label |
-| DetailText | Label | 当前选中项或详情文本 |
-| ResultText | Label | 操作结果，例如购买失败、合成成功 |
-| EmptyRoot | VisualElement | 没有数据时显示的空状态节点 |
-
-### BindingProvider 挂载位置
-
-建议在核心场景创建：UIRoot/UIToolkitRoot/BindingProviders。
-
-| 模块 | Provider 脚本 | 默认 ProviderId / Registry BindingProviderId |
-| --- | --- | --- |
-| 背包 | InventoryToolkitBindingProvider | InventoryPanel |
-| 存档 | SaveToolkitBindingProvider | SavePanel |
-| 任务 | QuestToolkitBindingProvider | QuestTracker |
-| 奖励 | RewardToolkitBindingProvider | RewardPanel |
-| 商店 | ShopToolkitBindingProvider | ShopPanel |
-| 合成 | CraftToolkitBindingProvider | CraftPanel |
-
-挂好后，把这些 Provider 物体拖到 UIToolkitViewFactory.Binding Provider Behaviours 数组里。UIToolkitViewRegistrySO 对应 View 条目的 BindingProviderId 必须和 Provider 的 ProviderId 一致。
-
-### 角色与成长类 Toolkit Provider
-
-NiumaUI 2.1.0 第五阶段新增以下业务面板 Provider。它们同样挂在 UIRoot/UIToolkitRoot/BindingProviders，并拖入 UIToolkitViewFactory.Binding Provider Behaviours。
-
-| 模块 | Receiver 脚本 | Provider 脚本 | 默认 ViewId / BindingProviderId |
-| --- | --- | --- | --- |
-| 属性面板 | AttributeToolkitReceiver | AttributeToolkitBindingProvider | AttributePanel |
-| 属性资源条 | AttributeResourceBarToolkitReceiver | AttributeResourceBarToolkitBindingProvider | AttributeResourceBar |
-| 效果 | EffectToolkitReceiver | EffectToolkitBindingProvider | EffectPanel |
-| 技能 | SkillToolkitReceiver | SkillToolkitBindingProvider | SkillPanel |
-| 成长 | GrowthToolkitReceiver | GrowthToolkitBindingProvider | GrowthPanel |
-| 装备 | EquipmentToolkitReceiver | EquipmentToolkitBindingProvider | EquipmentPanel |
-
-属性资源条 UXML 额外识别：ValueText 用于当前值文本，FillElement 用于填充条宽度。其他面板继续使用 TitleText / StatusText / ListRoot / DetailText / ResultText / EmptyRoot。
+禁止 `NiumaUI.Runtime` 反向引用任何业务模块。
+
+每个业务 ToolkitBridge 至少包含：
+
+- `XxxToolkitReceiver`：接收模块 UIUpdate，调用 `OpenView / RefreshView / CloseView`。
+- `XxxToolkitBindingProvider`：在 Inspector 里配置 UXML 元素 name 和按钮命令入口。
+- `XxxToolkitBinding`：把 ViewData 写入 VisualElement。
+- `XxxToolkitViewModel`：保存 UI 局部状态，例如选中项、搜索关键字、分页、临时输入。
+
+按钮点击只能回到对应模块的 `UIViewBridge`、`CommandRelay` 或 Controller 公开命令，不允许直接改 Service 内部状态。
+
+## UXML 命名建议
+
+| 名称 | 用途 |
+|---|---|
+| `TitleText` | 标题文本 |
+| `StatusText` | 状态或错误文本 |
+| `ContentRoot` | 正常内容根节点 |
+| `EmptyRoot` | 空状态根节点 |
+| `ErrorRoot` | 错误状态根节点 |
+| `LoadingRoot` | 加载状态根节点 |
+| `CloseButton` | 关闭按钮 |
+| `ConfirmButton` | 确认按钮 |
+| `CancelButton` | 取消按钮 |
+| `ListRoot` / `ItemList` | 列表 |
+| `DetailRoot` | 详情区域 |
+| `ResultText` | 结果提示 |
+
+具体模块可以扩展，但 README 和 Tooltip 必须写清楚元素应该放在哪里、填什么、不填会怎样。
+
+## Legacy UGUI 退场说明
+
+旧 UGUI 主链路已经删除，不再推荐也不再兼容新增功能。
+
+已退场脚本包括：
+
+- `UIManager`
+- `DefaultViewFactory`
+- `UIViewRegistrySO`
+- `ViewBase`
+- `ViewBindingBase`
+- `DialogueWindowView`
+- `DialogueWindowBinding`
+- 旧 `UIArbiter / UIBlackboard / UIStateMachine`
+
+如果旧场景或旧 Prefab 挂了这些脚本，Unity 会显示 Missing Script。处理方式是：删除旧组件，改挂 UI Toolkit 的 `UIToolkitUIManager`、`UIToolkitViewFactory` 和对应 `XxxToolkitReceiver / XxxToolkitBindingProvider`。
+
+## 验证清单
+
+新增或迁移 UI 面板后至少验证：
+
+1. ViewId 能通过 `UIToolkitUIManager.OpenView(ViewId)` 打开。
+2. `Refresh / Result / Cleared` 能正确映射到 Toolkit View。
+3. Cleared 且 `closeOnCleared = true` 时关闭后立即返回，不重新打开。
+4. 列表使用 `ToolkitListBinding<T>`，避免每次刷新手写 `new Label + Add`。
+5. 按钮回调只调用 Bridge / CommandRelay / Controller 的公开方法。
+6. 面板打开时输入阻塞策略正确，关闭后能释放对应原因。
